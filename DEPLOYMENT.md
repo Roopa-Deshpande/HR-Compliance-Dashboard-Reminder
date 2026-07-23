@@ -5,7 +5,7 @@ to a **Firebase** project for login, the shared database, real-time sync,
 and hosting. Everything — including the live URL — runs on Firebase's free
 Spark plan.
 
-**Live URL: https://hr-compliance-dashboard-26-27.web.app**
+**Live URL: https://hr-compliance-dashboard-25-26.web.app**
 
 GitHub is optional here — useful for version history / collaboration on
 the source code, but not required to serve the app.
@@ -66,7 +66,7 @@ project" — on a machine that's been used for other Firebase projects
 before, that cache can silently point a deploy at the wrong project.
 
 Firebase prints the live URL when it finishes:
-**https://hr-compliance-dashboard-26-27.web.app**
+**https://hr-compliance-dashboard-25-26.web.app**
 
 Firestore security rules deploy the same way, whenever `firestore.rules`
 changes:
@@ -91,7 +91,7 @@ redeploy.
 
 ## Part 4 — First login (create Roopa's Administrator account)
 
-1. Open **https://hr-compliance-dashboard-26-27.web.app**.
+1. Open **https://hr-compliance-dashboard-25-26.web.app**.
 2. Because no administrator exists yet, you'll see **"Welcome — First-Time
    Setup."** This screen only ever appears once, for whoever gets there
    first — so make sure Roopa is the one who fills it in.

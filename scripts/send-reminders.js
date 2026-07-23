@@ -38,7 +38,7 @@ const ESCALATION_RECIPIENT = process.env.ESCALATION_RECIPIENT || "nishant.m@evol
 const REMINDER_BEFORE_DAYS = parseInt(process.env.REMINDER_BEFORE_DAYS || "7", 10);
 const REMINDER_AFTER_DAYS = parseInt(process.env.REMINDER_AFTER_DAYS || "1", 10);
 const ESCALATION_AFTER_DAYS = parseInt(process.env.ESCALATION_AFTER_DAYS || "5", 10);
-const DASHBOARD_URL = "https://hr-compliance-dashboard-26-27.web.app";
+const DASHBOARD_URL = "https://hr-compliance-dashboard-25-26.web.app";
 
 function initFirebase() {
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
