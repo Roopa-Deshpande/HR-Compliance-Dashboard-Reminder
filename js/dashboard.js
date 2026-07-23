@@ -102,6 +102,13 @@ export function switchTab(id, el) {
   el.classList.add('active');
 }
 
+// Same as switchTab, but callable without already having the nav element
+// in hand (e.g. from a search result click) — looks it up by data-tab.
+function switchTabById(id) {
+  const el = document.querySelector(`.main-tab[data-tab="${id}"]`);
+  if (el) switchTab(id, el);
+}
+
 // ═══════════════════════════════════════════
 // MONTHLY TABLE
 // ═══════════════════════════════════════════
@@ -145,7 +152,7 @@ function renderMonthlyTable(mIdx) {
   }
   tbody.innerHTML = filtered.map(item => {
     const status = getStatus(item.date);
-    return `<tr style="${item.done?'opacity:0.5':''}">
+    return `<tr data-record-id="${item.id}" style="${item.done?'opacity:0.5':''}">
       <td><input type="checkbox" class="done-check" ${item.done?'checked':''} onchange="appToggleDone('${item.id}','monthly',this,${JSON.stringify(item.desc)})" title="Mark done"></td>
       <td class="date-cell">${fmt(item.date)}</td>
       <td class="desc-cell">${esc(item.desc)}${item.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${esc(item.notes)}</span>` : ''}</td>
@@ -216,7 +223,7 @@ function renderQuarterlyTable() {
     tbody.innerHTML = quarterly.map((row, i) => {
       const status = getStatus(row.due);
       const period = row.from && row.to ? `${row.from} – ${row.to}` : (row.period || '–');
-      return `<tr>
+      return `<tr data-record-id="${row.id}">
         <td>${i+1}</td>
         <td class="loc">${esc(row.loc)||'–'}</td>
         <td>${esc(period)}</td>
@@ -231,7 +238,7 @@ function renderQuarterlyTable() {
   if (clraTbody) {
     clraTbody.innerHTML = clra.map((row, i) => {
       const status = getStatus(row.due);
-      return `<tr>
+      return `<tr data-record-id="${row.id}">
         <td>${i+1}</td>
         <td class="loc">${esc(row.loc)||'–'}</td>
         <td style="font-size:12px">${esc(row.contractors)||'–'}</td>
@@ -260,7 +267,7 @@ function renderHalfYearlyTables() {
     const doneClass = v => v === 'Done' ? `<span style="color:var(--upcoming);font-weight:600">✓</span>` : `<span style="color:#d1d5db">–</span>`;
     esicTbody.innerHTML = hyEsic.map((row, i) => {
       const status = getStatus(row.due);
-      return `<tr>
+      return `<tr data-record-id="${row.id}">
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
         <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
         <td>${doneClass(row.hampi)}</td><td>${doneClass(row.eblr)}</td><td>${doneClass(row.ewd)}</td><td>${doneClass(row.tl)}</td>
@@ -272,7 +279,7 @@ function renderHalfYearlyTables() {
   if (ptTbody) {
     ptTbody.innerHTML = hyPt.map((row,i) => {
       const status = getStatus(row.due);
-      return `<tr>
+      return `<tr data-record-id="${row.id}">
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
         <td style="display:flex;gap:4px;align-items:center">${statusPill(status, row.status === 'Done')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
       </tr>`;
@@ -289,7 +296,7 @@ function renderYearlyTable() {
   tbody.innerHTML = yearly.map((row,i) => {
     const status = row.dateObj ? getStatus(row.dateObj) : 'upcoming';
     const doneClass = v => v === '✓' ? `<span style="color:var(--upcoming);font-weight:700">✓</span>` : `<span style="color:#d1d5db;font-size:11px">${esc(v)||'–'}</span>`;
-    return `<tr>
+    return `<tr data-record-id="${row.id}">
       <td>${i+1}</td>
       <td><strong style="font-size:13px">${esc(row.name)}</strong></td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.act)||'–'}</td>
@@ -361,7 +368,7 @@ function renderLicenses() {
     const folderHtml = `<div class="license-folder">📁 Document in folder: <span class="${lic.folder==='Yes'?'folder-yes':lic.folder==='No'?'folder-no':''}">${esc(lic.folder)}</span></div>`;
 
     grid.insertAdjacentHTML('beforeend', `
-      <div class="${cardClass}">
+      <div class="${cardClass}" data-record-id="${lic.id}">
         <div class="license-card-header">
           <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div></div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -609,3 +616,100 @@ export async function deleteUserUI(uid) {
 }
 
 export function getUsers() { return users; }
+
+// ═══════════════════════════════════════════
+// GLOBAL SEARCH — quick jump to any item from any tab
+// ═══════════════════════════════════════════
+const TYPE_TO_TAB = {
+  monthly: 'monthly', quarterly: 'quarterly', clra: 'quarterly',
+  halfyearly_esic: 'halfyearly', halfyearly_pt: 'halfyearly',
+  yearly: 'yearly', license: 'licenses',
+};
+const TYPE_ICON = {
+  monthly: '📅', quarterly: '📊', clra: '📊', halfyearly_esic: '🗓️',
+  halfyearly_pt: '🗓️', yearly: '📋', license: '🏛️',
+};
+
+function buildSearchIndex() {
+  const rows = [];
+  monthly.forEach(i => rows.push({ id: i.id, type: 'monthly', title: i.desc, sub: `${fmt(i.date)} · ${i.loc || ''}`, monthIdx: i.date ? i.date.getMonth() : null, text: `${i.desc} ${i.loc} ${i.cat}`.toLowerCase() }));
+  quarterly.forEach(i => { const period = i.from && i.to ? `${i.from} – ${i.to}` : (i.period || ''); rows.push({ id: i.id, type: 'quarterly', title: `${i.loc || 'ER-1'} Return`, sub: `${fmt(i.due)} · ${period}`, text: `${i.loc} ${period} er-1 quarterly`.toLowerCase() }); });
+  clra.forEach(i => rows.push({ id: i.id, type: 'clra', title: `${i.loc || 'CLRA'} Return`, sub: `${fmt(i.due)} · ${i.contractors || ''}`, text: `${i.loc} ${i.contractors} ${i.period} clra`.toLowerCase() }));
+  hyEsic.forEach(i => rows.push({ id: i.id, type: 'halfyearly_esic', title: 'ESIC Half-Yearly Return', sub: `${fmt(i.due)} · ${i.period || ''}`, text: `esic half yearly ${i.period}`.toLowerCase() }));
+  hyPt.forEach(i => rows.push({ id: i.id, type: 'halfyearly_pt', title: `Professional Tax – ${i.loc || ''}`, sub: `${fmt(i.due)} · ${i.period || ''}`, text: `professional tax ${i.loc} ${i.period}`.toLowerCase() }));
+  yearly.forEach(i => rows.push({ id: i.id, type: 'yearly', title: i.name, sub: `${i.due || ''} · ${i.act || ''}`, text: `${i.name} ${i.act} ${i.mode}`.toLowerCase() }));
+  licenses.forEach(i => rows.push({ id: i.id, type: 'license', title: i.company, sub: `${i.type} · ${i.loc || ''}`, text: `${i.company} ${i.type} ${i.loc} license`.toLowerCase() }));
+  return rows;
+}
+
+let searchResultIndex = [];
+
+export function handleGlobalSearch(query) {
+  const q = query.trim().toLowerCase();
+  const resultsEl = document.getElementById('globalSearchResults');
+  const clearBtn = document.getElementById('globalSearchClear');
+  if (clearBtn) clearBtn.style.display = q ? '' : 'none';
+  if (!resultsEl) return;
+
+  if (q.length < 2) {
+    resultsEl.classList.remove('show');
+    resultsEl.innerHTML = '';
+    return;
+  }
+
+  const matches = buildSearchIndex().filter(r => r.text.includes(q)).slice(0, 20);
+  searchResultIndex = matches;
+
+  if (!matches.length) {
+    resultsEl.innerHTML = `<div class="gsr-empty">No matches for "${esc(query)}"</div>`;
+  } else {
+    resultsEl.innerHTML = matches.map((r, i) => `
+      <div class="gsr-item" data-idx="${i}" onclick="appJumpToSearchResult(${i})">
+        <div style="font-size:15px">${TYPE_ICON[r.type] || '📄'}</div>
+        <div class="gsr-item-main">
+          <div class="gsr-item-title">${esc(r.title)}</div>
+          <div class="gsr-item-sub">${esc(r.sub)}</div>
+        </div>
+      </div>`).join('');
+  }
+  resultsEl.classList.add('show');
+}
+
+export function clearGlobalSearch() {
+  const input = document.getElementById('globalSearchInput');
+  if (input) input.value = '';
+  handleGlobalSearch('');
+}
+
+export function jumpToSearchResult(idx) {
+  const r = searchResultIndex[idx];
+  if (!r) return;
+  clearGlobalSearch();
+
+  const tabId = TYPE_TO_TAB[r.type];
+  if (tabId) switchTabById(tabId);
+
+  if (r.type === 'monthly' && r.monthIdx !== null) {
+    activeMonthIdx = r.monthIdx;
+    activeCatFilter = 'all';
+    activeLocFilter = 'all';
+    document.querySelectorAll('#panel-monthly .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+    document.querySelectorAll('#locFilterWrap .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+    renderMonthlyTable(r.monthIdx);
+    buildMonthTabs();
+  }
+  if (r.type === 'license') {
+    activeLicFilter = 'all';
+    document.querySelectorAll('#panel-licenses .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+    renderLicenses();
+  }
+
+  setTimeout(() => {
+    const el = document.querySelector(`[data-record-id="${r.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('search-highlight');
+      setTimeout(() => el.classList.remove('search-highlight'), 2000);
+    }
+  }, 80);
+}

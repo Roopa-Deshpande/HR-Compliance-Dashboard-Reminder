@@ -141,5 +141,22 @@ window.appStartUserEdit = dash.startUserEdit;
 window.appCancelUserEdit = dash.cancelUserEdit;
 window.appSaveUserEdit = dash.saveUserEdit;
 window.appDeleteUser = dash.deleteUserUI;
+window.appJumpToSearchResult = dash.jumpToSearchResult;
+window.clearGlobalSearch = dash.clearGlobalSearch;
+
+// ── Global search wiring ──────────────────────────────────────────
+const searchInput = document.getElementById('globalSearchInput');
+if (searchInput) {
+  searchInput.addEventListener('input', (e) => dash.handleGlobalSearch(e.target.value));
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') dash.clearGlobalSearch();
+  });
+}
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.global-search-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('globalSearchResults')?.classList.remove('show');
+  }
+});
 
 boot();

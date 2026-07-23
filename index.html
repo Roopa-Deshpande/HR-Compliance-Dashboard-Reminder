@@ -77,6 +77,16 @@
   </div>
 </div>
 
+<!-- GLOBAL SEARCH -->
+<div class="global-search-bar">
+  <div class="global-search-wrap">
+    <span class="global-search-icon">🔍</span>
+    <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search compliance items, licenses, locations..." autocomplete="off">
+    <button class="global-search-clear" id="globalSearchClear" style="display:none" onclick="clearGlobalSearch()">×</button>
+    <div class="global-search-results" id="globalSearchResults"></div>
+  </div>
+</div>
+
 <!-- REMINDER BANNER -->
 <div class="reminder-banner" id="reminderBanner">
   <div class="reminder-banner-icon">⏰</div>
@@ -89,13 +99,13 @@
 
 <!-- MAIN NAV TABS -->
 <div class="main-tabs">
-  <div class="main-tab active" onclick="switchTab('monthly',this)">📅 Monthly Returns <span class="tab-count" id="tc-monthly">0</span></div>
-  <div class="main-tab" onclick="switchTab('quarterly',this)">📊 Quarterly Returns</div>
-  <div class="main-tab" onclick="switchTab('halfyearly',this)">🗓️ Half-Yearly Returns</div>
-  <div class="main-tab" onclick="switchTab('yearly',this)">📋 Yearly Returns</div>
-  <div class="main-tab" onclick="switchTab('licenses',this)">🏛️ Licenses <span class="tab-count" id="tc-lic">0</span></div>
-  <div class="main-tab" onclick="switchTab('audit',this)">🕒 Activity Log</div>
-  <div class="main-tab admin-only" style="display:none" onclick="switchTab('admin',this)">⚙️ Admin</div>
+  <div class="main-tab active" data-tab="monthly" onclick="switchTab('monthly',this)">📅 Monthly Returns <span class="tab-count" id="tc-monthly">0</span></div>
+  <div class="main-tab" data-tab="quarterly" onclick="switchTab('quarterly',this)">📊 Quarterly Returns</div>
+  <div class="main-tab" data-tab="halfyearly" onclick="switchTab('halfyearly',this)">🗓️ Half-Yearly Returns</div>
+  <div class="main-tab" data-tab="yearly" onclick="switchTab('yearly',this)">📋 Yearly Returns</div>
+  <div class="main-tab" data-tab="licenses" onclick="switchTab('licenses',this)">🏛️ Licenses <span class="tab-count" id="tc-lic">0</span></div>
+  <div class="main-tab" data-tab="audit" onclick="switchTab('audit',this)">🕒 Activity Log</div>
+  <div class="main-tab admin-only" data-tab="admin" style="display:none" onclick="switchTab('admin',this)">⚙️ Admin</div>
 </div>
 
 <div class="page-wrap">
