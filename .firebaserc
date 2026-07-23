@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "hr-compliance-dashboard-26-27"
-  }
+  },
+  "targets": {
+    "hr-compliance-dashboard-26-27": {
+      "hosting": {
+        "main": [
+          "hr-compliance-dashboard-25-26"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
