@@ -47,7 +47,10 @@ service cloud.firestore {
         || isAdmin()
       );
       allow update: if isAdmin();
-      allow delete: if false; // accounts are deactivated (active:false), never deleted
+      // Admin can remove a user's profile (blocks all app access — see
+      // admin.js deleteUserProfile), but never their own, to prevent
+      // locking out the only signed-in admin.
+      allow delete: if isAdmin() && request.auth.uid != userId;
     }
 
     // ── records/{id} — all compliance data ───────────────────────

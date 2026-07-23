@@ -4,7 +4,7 @@
 // it, syncs it to every open browser instantly, and writes an audit entry.
 import { subscribeRecords, addRecord, updateRecord, deleteRecord, toggleRecordDone, toDate } from "./db.js";
 import { subscribeAuditLog, deleteAuditEntry } from "./audit.js";
-import { subscribeUsers, createUser, setUserRole, setUserActive } from "./admin.js";
+import { subscribeUsers, createUser, setUserRole, setUserActive, updateUserProfile, deleteUserProfile } from "./admin.js";
 import { currentUser, isAdmin } from "./auth.js";
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -520,22 +520,45 @@ export async function deleteAuditEntryUI(id) {
 // ═══════════════════════════════════════════
 // ADMIN — USER MANAGEMENT
 // ═══════════════════════════════════════════
+let editingUid = null; // uid of the row currently in inline-edit mode, or null
+
 function renderUsersPanel() {
   const tbody = document.getElementById('usersTbody');
   if (!tbody) return;
-  tbody.innerHTML = users.map(u => `
+  tbody.innerHTML = users.map(u => {
+    const isYou = u.uid === currentUser?.uid;
+    if (editingUid === u.uid) {
+      return `
+        <tr>
+          <td><input class="edit-input" id="eu-name-${u.uid}" value="${esc(u.name)}"></td>
+          <td><input class="edit-input" id="eu-email-${u.uid}" value="${esc(u.email)}" type="email"></td>
+          <td colspan="2" style="color:var(--text-muted);font-size:11px">
+            ${isYou ? 'Changing your email updates your actual login credential.' : "Changing another user's email here updates only the contact address shown in the app — it does not change their login credential (they'd need to do that themselves)."}
+          </td>
+          <td style="display:flex;gap:6px">
+            <button class="save-btn" onclick="appSaveUserEdit('${u.uid}')">Save</button>
+            <button class="filter-btn" style="padding:3px 10px" onclick="appCancelUserEdit()">Cancel</button>
+          </td>
+        </tr>`;
+    }
+    return `
     <tr style="${u.active===false?'opacity:0.5':''}">
-      <td>${esc(u.name)}${u.uid === currentUser?.uid ? ' <span style="font-size:10px;color:var(--text-muted)">(you)</span>' : ''}</td>
+      <td>${esc(u.name)}${isYou ? ' <span style="font-size:10px;color:var(--text-muted)">(you)</span>' : ''}</td>
       <td>${esc(u.email)}</td>
       <td>
-        <select class="edit-select" onchange="appSetUserRole('${u.uid}','${u.role}',this)" ${u.uid === currentUser?.uid ? 'disabled title="You cannot change your own role"' : ''}>
+        <select class="edit-select" onchange="appSetUserRole('${u.uid}','${u.role}',this)" ${isYou ? 'disabled title="You cannot change your own role"' : ''}>
           <option value="user" ${u.role==='user'?'selected':''}>Standard User</option>
           <option value="admin" ${u.role==='admin'?'selected':''}>Administrator</option>
         </select>
       </td>
       <td>${u.active===false ? '<span style="color:var(--overdue);font-weight:600">Deactivated</span>' : '<span style="color:var(--upcoming);font-weight:600">Active</span>'}</td>
-      <td>${u.uid === currentUser?.uid ? '–' : `<button class="filter-btn" style="padding:3px 10px" onclick="appSetUserActive('${u.uid}',${u.active===false})">${u.active===false?'Reactivate':'Deactivate'}</button>`}</td>
-    </tr>`).join('') || `<tr><td colspan="5"><div class="empty-state">No users yet.</div></td></tr>`;
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="filter-btn" style="padding:3px 10px" onclick="appStartUserEdit('${u.uid}')">Edit</button>
+        ${isYou ? '' : `<button class="filter-btn" style="padding:3px 10px" onclick="appSetUserActive('${u.uid}',${u.active===false})">${u.active===false?'Reactivate':'Deactivate'}</button>`}
+        ${isYou ? '' : `<button class="del-btn" onclick="appDeleteUser('${u.uid}')" title="Permanently remove this user">🗑</button>`}
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5"><div class="empty-state">No users yet.</div></td></tr>`;
 }
 
 export async function createUserFromForm() {
@@ -555,6 +578,34 @@ export async function setUserRoleUI(uid, prevRole, sel) {
 }
 export async function setUserActiveUI(uid, activate) {
   try { await setUserActive(uid, activate); } catch (e) { alert(e.message); }
+}
+
+export function startUserEdit(uid) { editingUid = uid; renderUsersPanel(); }
+export function cancelUserEdit() { editingUid = null; renderUsersPanel(); }
+
+export async function saveUserEdit(uid) {
+  const prevProfile = users.find(u => u.uid === uid);
+  if (!prevProfile) return;
+  const name = document.getElementById(`eu-name-${uid}`).value.trim();
+  const email = document.getElementById(`eu-email-${uid}`).value.trim();
+  if (!name || !email) { alert('Name and email are required.'); return; }
+  try {
+    await updateUserProfile(uid, { name, email }, prevProfile, async () => {
+      return prompt(`For security, Firebase needs you to confirm your current password before changing your login email (${prevProfile.email}):`);
+    });
+    editingUid = null;
+    if (uid === currentUser?.uid) alert('Your profile was updated. If your login email changed, use the new address next time you sign in.');
+  } catch (e) {
+    alert('Could not save changes: ' + e.message);
+  }
+}
+
+export async function deleteUserUI(uid) {
+  const prevProfile = users.find(u => u.uid === uid);
+  if (!prevProfile) return;
+  if (!confirm(`Permanently remove ${prevProfile.name} (${prevProfile.email})? They will lose all access immediately. This cannot be undone from the app.`)) return;
+  try { await deleteUserProfile(uid, prevProfile); }
+  catch (e) { alert('Could not delete user: ' + e.message); }
 }
 
 export function getUsers() { return users; }

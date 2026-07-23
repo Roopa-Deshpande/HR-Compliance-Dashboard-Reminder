@@ -137,5 +137,9 @@ window.appDeleteAudit = dash.deleteAuditEntryUI;
 window.createUserFromForm = dash.createUserFromForm;
 window.appSetUserRole = dash.setUserRoleUI;
 window.appSetUserActive = dash.setUserActiveUI;
+window.appStartUserEdit = dash.startUserEdit;
+window.appCancelUserEdit = dash.cancelUserEdit;
+window.appSaveUserEdit = dash.saveUserEdit;
+window.appDeleteUser = dash.deleteUserUI;
 
 boot();
