@@ -1,0 +1,69 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myProfile().role == 'admin'
+        && myProfile().active != false;
+    }
+    function isActiveUser() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myProfile().active != false;
+    }
+
+    // ── meta/setup — bootstrap marker ────────────────────────────
+    // Must be publicly READABLE (no signed-in user exists yet the very
+    // first time the app loads) so the app can decide whether to show
+    // the "create administrator" screen or the normal login screen.
+    // It can only ever be created once, and never changed after that.
+    match /meta/setup {
+      allow read: if true;
+      allow create: if isSignedIn() && !exists(/databases/$(database)/documents/meta/setup);
+      allow update, delete: if false;
+    }
+
+    // ── users/{uid} — profiles & roles ───────────────────────────
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      // Bootstrap: the very first signed-in user may create their OWN
+      // profile as 'admin', but only before meta/setup exists.
+      // After that, only an existing admin may create user profiles
+      // (done via a secondary, throwaway auth session — see admin.js).
+      allow create: if isSignedIn() && (
+        (request.auth.uid == userId
+          && request.resource.data.role == 'admin'
+          && !exists(/databases/$(database)/documents/meta/setup))
+        || isAdmin()
+      );
+      allow update: if isAdmin();
+      allow delete: if false; // accounts are deactivated (active:false), never deleted
+    }
+
+    // ── records/{id} — all compliance data ───────────────────────
+    // Standard users have full create/edit/delete access to records;
+    // only the audit log itself is delete-restricted to admins.
+    match /records/{recordId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isActiveUser();
+    }
+
+    // ── auditLog/{id} — immutable trail, admin-only delete ───────
+    match /auditLog/{entryId} {
+      allow read: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "hr-compliance-reminder-script",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Scheduled daily email reminder digest for the HR Compliance Dashboard. Run via GitHub Actions, not part of the web app itself.",
+  "main": "send-reminders.js",
+  "scripts": {
+    "start": "node send-reminders.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "nodemailer": "^6.9.15"
+  }
+}

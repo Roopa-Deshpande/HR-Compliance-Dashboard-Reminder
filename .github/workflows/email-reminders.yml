@@ -1,0 +1,35 @@
+name: Daily Compliance Email Reminders
+
+on:
+  schedule:
+    # 01:30 UTC = 07:00 IST — adjust if a different send time is wanted.
+    - cron: "30 1 * * *"
+  workflow_dispatch: {} # lets you trigger a test run manually from the Actions tab
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install script dependencies
+        working-directory: scripts
+        run: npm install
+
+      - name: Send reminder digest
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # ── Reminder criteria — edit these two numbers directly, no code
+          # changes needed. Not secrets, just plain settings.
+          REMINDER_WINDOW_DAYS: "7"        # days before a due date to start flagging "due soon"
+          LICENSE_EXPIRY_WINDOW_DAYS: "180" # days before a license expiry to start flagging "expiring soon"
+        run: node send-reminders.js
