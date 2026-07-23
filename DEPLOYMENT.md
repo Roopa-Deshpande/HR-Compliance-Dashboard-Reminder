@@ -182,7 +182,7 @@ you want a different time).
 | Only admin deletes audit log | Enforced in `firestore.rules` (`allow delete: if isAdmin()` on `auditLog`), not just hidden in the UI. |
 | Session timeout | 30 minutes of inactivity signs the user out automatically (`SESSION_TIMEOUT_MINUTES` in `js/firebase-config.js`). |
 | Data encryption | Firestore encrypts all data at rest and in transit (TLS) by default — this is inherent to Firebase, not something the app configures. |
-| Email reminders before/after due date | Daily GitHub Actions cron job (`scripts/send-reminders.js`) emails a digest of overdue + due-soon items to every active user — see Part 6. Recurs automatically until an item is marked done, since it re-checks live state on every run. |
+| Email reminders before/after due date | Daily GitHub Actions cron job (`scripts/send-reminders.js`) — see Part 6. Fires at exact points relative to each item's due date: 7 days before, 1 day after, and a 5-days-after escalation if still incomplete. Reminders go to `REMINDER_RECIPIENT` (default vinod.k@evolveback.com); escalations additionally go to `ESCALATION_RECIPIENT` (default nishant.m@evolveback.com). |
 
 ## Known limitations (free-tier trade-offs)
 

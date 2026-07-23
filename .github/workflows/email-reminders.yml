@@ -28,8 +28,11 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          # ── Reminder criteria — edit these two numbers directly, no code
-          # changes needed. Not secrets, just plain settings.
-          REMINDER_WINDOW_DAYS: "7"        # days before a due date to start flagging "due soon"
-          LICENSE_EXPIRY_WINDOW_DAYS: "180" # days before a license expiry to start flagging "expiring soon"
+          # ── Reminder criteria — edit these directly, no code changes
+          # needed. Not secrets, just plain settings.
+          REMINDER_RECIPIENT: "vinod.k@evolveback.com"     # gets the 7-day-before and 1-day-after reminders, plus escalations
+          ESCALATION_RECIPIENT: "nishant.m@evolveback.com" # additionally gets escalations only
+          REMINDER_BEFORE_DAYS: "7"  # send a reminder exactly this many days BEFORE the due date
+          REMINDER_AFTER_DAYS: "1"   # send a reminder exactly this many days AFTER the due date
+          ESCALATION_AFTER_DAYS: "5" # send an escalation exactly this many days AFTER the due date, if still incomplete
         run: node send-reminders.js
