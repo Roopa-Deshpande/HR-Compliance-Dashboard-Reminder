@@ -1,23 +1,44 @@
 {
-  "hosting": {
-    "target": "main",
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      ".firebaserc",
-      "firestore.rules",
-      "DEPLOYMENT.md",
-      "**/.*",
-      "**/node_modules/**",
-      "node_modules/**",
-      "scripts/**",
-      ".github/**",
-      ".claude/**"
-    ],
-    "rewrites": [
-      { "source": "**", "destination": "/index.html" }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "main",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        "firestore.rules",
+        "DEPLOYMENT.md",
+        "**/.*",
+        "**/node_modules/**",
+        "node_modules/**",
+        "scripts/**",
+        ".github/**",
+        ".claude/**"
+      ],
+      "rewrites": [
+        { "source": "**", "destination": "/index.html" }
+      ]
+    },
+    {
+      "target": "old-url",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        "firestore.rules",
+        "DEPLOYMENT.md",
+        "**/.*",
+        "**/node_modules/**",
+        "node_modules/**",
+        "scripts/**",
+        ".github/**",
+        ".claude/**"
+      ],
+      "redirects": [
+        { "source": "/**", "destination": "https://hr-compliance-dashboard-25-26.web.app", "type": 301 }
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   }

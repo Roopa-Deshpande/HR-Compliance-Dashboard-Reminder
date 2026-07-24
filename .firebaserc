@@ -7,6 +7,9 @@
       "hosting": {
         "main": [
           "hr-compliance-dashboard-25-26"
+        ],
+        "old-url": [
+          "hr-compliance-dashboard-26-27"
         ]
       }
     }
