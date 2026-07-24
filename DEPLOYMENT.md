@@ -74,10 +74,6 @@ changes:
 npx firebase-tools deploy --only firestore:rules --project hr-compliance-dashboard-26-27
 ```
 
-*(Optional: `.github/workflows/deploy.yml` is still included if you'd
-rather also mirror the site to GitHub Pages, but it isn't required —
-Firebase Hosting is the live URL above.)*
-
 ---
 
 ## Part 3 — Connect the code to your Firebase project
