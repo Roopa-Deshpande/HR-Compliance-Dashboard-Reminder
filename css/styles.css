@@ -79,6 +79,15 @@ body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--
 }
 .topbar-btn:hover { background: rgba(255,255,255,0.2); }
 
+/* FISCAL YEAR SWITCHER */
+.fy-switcher { display: flex; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 2px; }
+.fy-switch-btn {
+  background: none; border: none; color: rgba(255,255,255,0.65); font-size: 11px; font-weight: 600;
+  padding: 5px 12px; border-radius: 18px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.15s;
+}
+.fy-switch-btn.active { background: var(--gold); color: var(--navy); }
+.fy-switch-btn:not(.active):hover { color: #fff; }
+
 /* GLOBAL SEARCH */
 .global-search-bar {
   background: var(--navy-light); padding: 10px 32px; position: sticky; top: 60px; z-index: 160;

@@ -1,9 +1,14 @@
-// One-time import of the original Excel-derived compliance data into
-// Firestore. Only an Administrator can run this (button lives in the
-// Admin panel), and it refuses to run if records already exist so it
-// can never silently duplicate data.
+// Import of the Excel-derived compliance data into Firestore, parameterized
+// by fiscal year. Only an Administrator can run these (buttons live in the
+// Admin panel). Each guards against re-running for the same fiscal year so
+// it can never silently duplicate data.
+//
+// Licenses are NOT duplicated per fiscal year — a license's validity isn't
+// tied to one FY the way a monthly/quarterly/yearly filing is (see the
+// fiscalYear filtering logic in dashboard.js), so they're only seeded once,
+// as part of the very first import.
 import {
-  collection, getDocs, query, limit, writeBatch, doc, serverTimestamp, Timestamp
+  collection, getDocs, query, where, limit, writeBatch, doc, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { db } from "./firebase-init.js";
 import { currentUser, isAdmin } from "./auth.js";
@@ -22,7 +27,10 @@ const LOCS = {
   ER: 'Earth Reserve', MANDAV: 'Mandav', ELK: 'Elkhill', ALL: 'All Locations'
 };
 
-function buildMonthlyData() {
+// yearOffset: 0 = the original FY2025-26 dataset's dates as written below;
+// +1 shifts every date forward exactly one year, producing FY2026-27, etc.
+function buildMonthlyData(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
   const data = [];
   const pfEntities = [
     { name:'EPFO – OCRHL (BLR+Coorg+Kabini)', loc: LOCS.BLR },
@@ -49,76 +57,89 @@ function buildMonthlyData() {
   for (let m = 3; m <= 14; m++) {
     const yr = m > 11 ? 2026 : 2025;
     const mo = m % 12;
-    pfEntities.forEach(e => data.push({ date: new Date(yr, mo, 14), desc: `PF Challan Payment – ${months[mo]} (${e.name})`, cat: 'PF', loc: e.loc, reminderDays: 7, notes: '' }));
-    esicEntities.forEach(e => data.push({ date: new Date(yr, mo, 15), desc: `ESI Challan Payment – ${months[mo]} (${e.name})`, cat: 'ESI', loc: e.loc, reminderDays: 7, notes: '' }));
-    ptEntities.forEach(e => data.push({ date: new Date(yr, mo, 20), desc: `Professional Tax Return – ${months[mo]} (${e.name})`, cat: 'PT', loc: e.loc, reminderDays: 7, notes: '' }));
-    if (mo === 0) data.push({ date: new Date(yr, 0, 15), desc: `Labour Welfare Fund – Payment & Return (Karnataka)`, cat: 'LWF', loc: LOCS.ALL, reminderDays: 7, notes: '' });
+    pfEntities.forEach(e => data.push({ date: D(yr, mo, 14), desc: `PF Challan Payment – ${months[mo]} (${e.name})`, cat: 'PF', loc: e.loc, reminderDays: 7, notes: '' }));
+    esicEntities.forEach(e => data.push({ date: D(yr, mo, 15), desc: `ESI Challan Payment – ${months[mo]} (${e.name})`, cat: 'ESI', loc: e.loc, reminderDays: 7, notes: '' }));
+    ptEntities.forEach(e => data.push({ date: D(yr, mo, 20), desc: `Professional Tax Return – ${months[mo]} (${e.name})`, cat: 'PT', loc: e.loc, reminderDays: 7, notes: '' }));
+    if (mo === 0) data.push({ date: D(yr, 0, 15), desc: `Labour Welfare Fund – Payment & Return (Karnataka)`, cat: 'LWF', loc: LOCS.ALL, reminderDays: 7, notes: '' });
   }
   return data;
 }
 
-const quarterlyData = [
-  { loc:'Bangalore', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'29-Jul-2025', note:'25+ employees' },
-  { loc:'Bangalore', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'31-Oct-2025', note:'' },
-  { loc:'Bangalore', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'30-Jan-2026', note:'' },
-  { loc:'Bangalore', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Coorg', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Coorg', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Coorg', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Coorg', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Kabini', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Kabini', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Kabini', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Kabini', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Hampi', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Hampi', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Hampi', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Hampi', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Earthitects BLR', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Earthitects BLR', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Earthitects BLR', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Earthitects BLR', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Earthitects Wayanad', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Earthitects Wayanad', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Earthitects Wayanad', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Earthitects Wayanad', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-  { loc:'Terralife', from:'01 Apr 2025', to:'30 Jun 2025', due: new Date(2025,6,30), submitted:'', note:'' },
-  { loc:'Terralife', from:'01 Jul 2025', to:'30 Sep 2025', due: new Date(2025,9,30), submitted:'', note:'' },
-  { loc:'Terralife', from:'01 Oct 2025', to:'31 Dec 2025', due: new Date(2026,0,30), submitted:'', note:'' },
-  { loc:'Terralife', from:'01 Jan 2026', to:'31 Mar 2026', due: new Date(2026,3,30), submitted:'', note:'' },
-];
+function buildQuarterlyData(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
+  const locs = ['Bangalore', 'Coorg', 'Kabini', 'Hampi', 'Earthitects BLR', 'Earthitects Wayanad', 'Terralife'];
+  const quarters = [
+    { from:'01 Apr', to:'30 Jun', fromY:2025, toY:2025, due: D(2025,6,30) },
+    { from:'01 Jul', to:'30 Sep', fromY:2025, toY:2025, due: D(2025,9,30) },
+    { from:'01 Oct', to:'31 Dec', fromY:2025, toY:2025, due: D(2026,0,30) },
+    { from:'01 Jan', to:'31 Mar', fromY:2026, toY:2026, due: D(2026,3,30) },
+  ];
+  const data = [];
+  // Submitted-date year must come from the due date itself (due.getFullYear()),
+  // not the quarter's label year — Q3's due date (30 Jan) falls in the
+  // calendar year AFTER the "Oct–Dec" period it belongs to.
+  // These "already submitted" markers reflect the real FY2025-26 (offset 0)
+  // filing history — a future fiscal year can't have anything submitted yet.
+  locs.forEach(loc => quarters.forEach(q => data.push({
+    loc, from: `${q.from} ${q.fromY + yearOffset}`, to: `${q.to} ${q.toY + yearOffset}`, due: q.due,
+    submitted: (yearOffset === 0 && loc === 'Bangalore') ? (q.due.getMonth() === 6 ? '29-Jul-' + q.due.getFullYear() : q.due.getMonth() === 9 ? '31-Oct-' + q.due.getFullYear() : q.due.getMonth() === 0 ? '30-Jan-' + q.due.getFullYear() : '') : '',
+    note: loc === 'Bangalore' && q.due.getMonth() === 6 ? '25+ employees' : ''
+  })));
+  return data;
+}
 
-const clraData = [
-  { loc:'Coorg', contractors:'SIS, G4S, PIC, Mandav (4 contracts)', workers:'SIS:16, G4S:3, PIC:2', period:'FY 2025-26', due: new Date(2026,0,31) },
-  { loc:'Kabini', contractors:'SIS, G4S (2 contracts)', workers:'SIS:8, G4S:12', period:'FY 2025-26', due: new Date(2026,0,31) },
-  { loc:'Hampi', contractors:'SIS, G4S, PIC (4 contracts)', workers:'SIS:7, G4S:9, PIC:1', period:'FY 2025-26', due: new Date(2026,0,31) },
-  { loc:'Bangalore', contractors:'Ramapuram 2 contracts, 3 additional', workers:'3', period:'FY 2025-26', due: new Date(2026,0,31) },
-];
+function buildClraData(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
+  const fyLabel = `FY ${2025 + yearOffset}-${String(2026 + yearOffset).slice(2)}`;
+  return [
+    { loc:'Coorg', contractors:'SIS, G4S, PIC, Mandav (4 contracts)', workers:'SIS:16, G4S:3, PIC:2', period: fyLabel, due: D(2026,0,31) },
+    { loc:'Kabini', contractors:'SIS, G4S (2 contracts)', workers:'SIS:8, G4S:12', period: fyLabel, due: D(2026,0,31) },
+    { loc:'Hampi', contractors:'SIS, G4S, PIC (4 contracts)', workers:'SIS:7, G4S:9, PIC:1', period: fyLabel, due: D(2026,0,31) },
+    { loc:'Bangalore', contractors:'Ramapuram 2 contracts, 3 additional', workers:'3', period: fyLabel, due: D(2026,0,31) },
+  ];
+}
 
-const halfYearlyEsic = [
-  { period:'Apr 2025 – Sep 2025', due: new Date(2025,10,11), blr:'Done', coorg:'Done', kabini:'Done', hampi:'Done', eblr:'Done', ewd:'', tl:'Done' },
-  { period:'Oct 2025 – Mar 2026', due: new Date(2026,4,11), blr:'Done', coorg:'Done', kabini:'Done', hampi:'Done', eblr:'Done', ewd:'', tl:'Done' },
-];
-const halfYearlyPt = [
-  { period:'Apr 2025 – Aug 2025', due: new Date(2025,7,31), loc:'Earthitects Wayanad', status:'Done' },
-  { period:'Oct 2025 – Mar 2026', due: new Date(2026,2,31), loc:'Earthitects Wayanad', status:'' },
-];
+function buildHalfYearlyEsic(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
+  // The actual FY2025-26 filings (offset 0) were already done at the time
+  // this dataset was written; future years start blank since nothing's
+  // been filed yet.
+  const done = yearOffset === 0 ? 'Done' : '';
+  return [
+    { period:`Apr ${2025+yearOffset} – Sep ${2025+yearOffset}`, due: D(2025,10,11), blr:done, coorg:done, kabini:done, hampi:done, eblr:done, ewd:'', tl:done },
+    { period:`Oct ${2025+yearOffset} – Mar ${2026+yearOffset}`, due: D(2026,4,11), blr:done, coorg:done, kabini:done, hampi:done, eblr:done, ewd:'', tl:done },
+  ];
+}
+function buildHalfYearlyPt(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
+  return [
+    { period:`Apr ${2025+yearOffset} – Aug ${2025+yearOffset}`, due: D(2025,7,31), loc:'Earthitects Wayanad', status: yearOffset === 0 ? 'Done' : '' },
+    { period:`Oct ${2025+yearOffset} – Mar ${2026+yearOffset}`, due: D(2026,2,31), loc:'Earthitects Wayanad', status:'' },
+  ];
+}
 
-const yearlyData = [
-  { name:'PT Annual Return (Form 5A)', act:'Prof. Tax Act', due:'30 May every year', mode:'Online', blr:'✓', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,4,30) },
-  { name:'Labour Form U (Annual Return)', act:'Contract Labour Act', due:'31 Jan every year', mode:'Online', blr:'✓', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'Bonus Return (Form D)', act:'Payment of Bonus Act', due:'31 Dec every year', mode:'Hard Copy to Labour Dept', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2025,11,31) },
-  { name:'Holiday List (NFH / Form Q)', act:'Karnataka S&E Act / NI Act', due:'On or before 31 Dec', mode:'Display at premises', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2025,11,31) },
-  { name:'POSH / She-Box Annual Return', act:'POSH Act, 2013', due:'31 Jan every year', mode:'She-Box Portal (Online)', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'LWF Annual Return (Form D)', act:'Karnataka LWF Act', due:'15 Jan every year', mode:'Submission to LWF Board', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,15) },
-  { name:'ESIC – Form 1A (Changes)', act:'ESIC Act, 1948', due:'On any change', mode:'ESIC Portal', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: null },
-  { name:'CLRA Annual Return (Form XXIV)', act:'CLRA, 1970', due:'31 Jan every year', mode:'Registering Officer', blr:'', coorg:'✓', kabini:'✓', hampi:'✓', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'Gratuity Annual Return (Form R)', act:'Payment of Gratuity Act', due:'31 Jan every year', mode:'Controlling Authority', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'Apprentice Act Return', act:'Apprentices Act, 1961', due:'As notified', mode:'RDAT / State Adviser', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'TBD', dateObj: null },
-  { name:'Equal Remuneration Return (Form D)', act:'Equal Remuneration Act', due:'31 Jan every year', mode:'Labour Inspector', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'Minimum Wages Return (Form III)', act:'Minimum Wages Act, 1948', due:'31 Jan every year', mode:'Online / Inspector', blr:'', coorg:'', kabini:'', hampi:'', ear:'', tl:'', others:'', dateObj: new Date(2026,0,31) },
-  { name:'Factory License Renewal', act:'Factories Act, 1948', due:'Before 31 Dec of expiry year', mode:'District Factory Inspector', blr:'N/A', coorg:'N/A', kabini:'N/A', hampi:'N/A', ear:'N/A', tl:'✓', others:'Elkhill ✓', dateObj: new Date(2025,11,31) },
-];
+function buildYearlyData(yearOffset) {
+  const D = (y, m, d) => new Date(y + yearOffset, m, d);
+  // ✓ marks below record filings already completed for the actual
+  // FY2025-26 (offset 0) at the time this dataset was written — future
+  // years start unmarked since nothing's been filed yet.
+  const done = yearOffset === 0 ? '✓' : '';
+  return [
+    { name:'PT Annual Return (Form 5A)', act:'Prof. Tax Act', due:`30 May ${2026+yearOffset}`, mode:'Online', blr:done,coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,4,30) },
+    { name:'Labour Form U (Annual Return)', act:'Contract Labour Act', due:`31 Jan ${2026+yearOffset}`, mode:'Online', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'Bonus Return (Form D)', act:'Payment of Bonus Act', due:`31 Dec ${2025+yearOffset}`, mode:'Hard Copy to Labour Dept', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2025,11,31) },
+    { name:'Holiday List (NFH / Form Q)', act:'Karnataka S&E Act / NI Act', due:`31 Dec ${2025+yearOffset}`, mode:'Display at premises', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2025,11,31) },
+    { name:'POSH / She-Box Annual Return', act:'POSH Act, 2013', due:`31 Jan ${2026+yearOffset}`, mode:'She-Box Portal (Online)', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'LWF Annual Return (Form D)', act:'Karnataka LWF Act', due:`15 Jan ${2026+yearOffset}`, mode:'Submission to LWF Board', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,15) },
+    { name:'ESIC – Form 1A (Changes)', act:'ESIC Act, 1948', due:'On any change', mode:'ESIC Portal', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: null },
+    { name:'CLRA Annual Return (Form XXIV)', act:'CLRA, 1970', due:`31 Jan ${2026+yearOffset}`, mode:'Registering Officer', blr:'',coorg:done,kabini:done,hampi:done,ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'Gratuity Annual Return (Form R)', act:'Payment of Gratuity Act', due:`31 Jan ${2026+yearOffset}`, mode:'Controlling Authority', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'Apprentice Act Return', act:'Apprentices Act, 1961', due:'As notified', mode:'RDAT / State Adviser', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'TBD', dateObj: null },
+    { name:'Equal Remuneration Return (Form D)', act:'Equal Remuneration Act', due:`31 Jan ${2026+yearOffset}`, mode:'Labour Inspector', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'Minimum Wages Return (Form III)', act:'Minimum Wages Act, 1948', due:`31 Jan ${2026+yearOffset}`, mode:'Online / Inspector', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj: D(2026,0,31) },
+    { name:'Factory License Renewal', act:'Factories Act, 1948', due:`Before 31 Dec ${2025+yearOffset} of expiry year`, mode:'District Factory Inspector', blr:'N/A',coorg:'N/A',kabini:'N/A',hampi:'N/A',ear:'N/A',tl:done,others: yearOffset === 0 ? 'Elkhill ✓' : '', dateObj: D(2025,11,31) },
+  ];
+}
 
 const licenseData = [
   { company:'OCRHL', loc:'Bangalore', type:'SE', expiry: excelDateToJS(47848), limit:148, current:132, folder:'Yes', remarks:'' },
@@ -150,24 +171,25 @@ const licenseData = [
   { company:'Terralife', loc:'Bangalore', type:'Factory', expiry: null, limit:null, current:null, folder:'Yes', remarks:'Factories Act' },
 ];
 
-function buildSeedDocs() {
+// Builds the year-scoped docs (monthly/quarterly/clra/halfyearly/yearly),
+// each tagged fields.fiscalYear = fiscalYear, dates shifted by yearOffset
+// years relative to the original FY2025-26 dataset.
+function buildYearScopedDocs(yearOffset, fiscalYear) {
   const docs = [];
-  buildMonthlyData().forEach(f => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date) } }));
-  quarterlyData.forEach(f => docs.push({ type: 'quarterly', fields: { ...f, due: ts(f.due) } }));
-  clraData.forEach(f => docs.push({ type: 'clra', fields: { ...f, due: ts(f.due) } }));
-  halfYearlyEsic.forEach(f => docs.push({ type: 'halfyearly_esic', fields: { ...f, due: ts(f.due) } }));
-  halfYearlyPt.forEach(f => docs.push({ type: 'halfyearly_pt', fields: { ...f, due: ts(f.due) } }));
-  yearlyData.forEach(f => docs.push({ type: 'yearly', fields: { ...f, dateObj: ts(f.dateObj) } }));
-  licenseData.forEach(f => docs.push({ type: 'license', fields: { ...f, expiry: ts(f.expiry) } }));
+  buildMonthlyData(yearOffset).forEach(f => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date), fiscalYear } }));
+  buildQuarterlyData(yearOffset).forEach(f => docs.push({ type: 'quarterly', fields: { ...f, due: ts(f.due), fiscalYear } }));
+  buildClraData(yearOffset).forEach(f => docs.push({ type: 'clra', fields: { ...f, due: ts(f.due), fiscalYear } }));
+  buildHalfYearlyEsic(yearOffset).forEach(f => docs.push({ type: 'halfyearly_esic', fields: { ...f, due: ts(f.due), fiscalYear } }));
+  buildHalfYearlyPt(yearOffset).forEach(f => docs.push({ type: 'halfyearly_pt', fields: { ...f, due: ts(f.due), fiscalYear } }));
+  buildYearlyData(yearOffset).forEach(f => docs.push({ type: 'yearly', fields: { ...f, dateObj: ts(f.dateObj), fiscalYear } }));
   return docs;
 }
 
-export async function seedInitialData() {
-  if (!isAdmin()) throw new Error("Only the Administrator can run the initial data import.");
-  const existing = await getDocs(query(collection(db, "records"), limit(1)));
-  if (!existing.empty) throw new Error("Records already exist — the initial import has already been run.");
+function buildLicenseDocs() {
+  return licenseData.map(f => ({ type: 'license', fields: { ...f, expiry: ts(f.expiry) } }));
+}
 
-  const docs = buildSeedDocs();
+async function commitDocs(docs) {
   const CHUNK = 400;
   for (let i = 0; i < docs.length; i += CHUNK) {
     const batch = writeBatch(db);
@@ -181,9 +203,40 @@ export async function seedInitialData() {
     });
     await batch.commit();
   }
+}
+
+// First-ever import: FY2025-26 recurring calendar + the license tracker
+// (licenses are shared across all fiscal years, so they only get created
+// here, never re-created by seedNextFiscalYear).
+export async function seedInitialData() {
+  if (!isAdmin()) throw new Error("Only the Administrator can run the initial data import.");
+  const existing = await getDocs(query(collection(db, "records"), limit(1)));
+  if (!existing.empty) throw new Error("Records already exist — the initial import has already been run.");
+
+  const docs = [...buildYearScopedDocs(0, '2025-26'), ...buildLicenseDocs()];
+  await commitDocs(docs);
 
   await logAction({
-    action: "Create", recordType: "bulk-import", recordId: "seed", recordSummary: `Initial data import — ${docs.length} records`,
+    action: "Create", recordType: "bulk-import", recordId: "seed-2025-26", recordSummary: `Initial data import (FY 2025-26) — ${docs.length} records`,
+    previousValue: null, newValue: { count: docs.length }
+  });
+  return docs.length;
+}
+
+// Adds the next fiscal year's recurring calendar (dates shifted forward one
+// year from the FY2025-26 pattern), without touching licenses — those
+// already exist from seedInitialData and aren't year-specific.
+export async function seedNextFiscalYear() {
+  if (!isAdmin()) throw new Error("Only the Administrator can run this import.");
+  const fiscalYear = '2026-27';
+  const existing = await getDocs(query(collection(db, "records"), where("fields.fiscalYear", "==", fiscalYear), limit(1)));
+  if (!existing.empty) throw new Error(`FY ${fiscalYear} records already exist — this import has already been run.`);
+
+  const docs = buildYearScopedDocs(1, fiscalYear);
+  await commitDocs(docs);
+
+  await logAction({
+    action: "Create", recordType: "bulk-import", recordId: "seed-2026-27", recordSummary: `FY 2026-27 data import — ${docs.length} records`,
     previousValue: null, newValue: { count: docs.length }
   });
   return docs.length;

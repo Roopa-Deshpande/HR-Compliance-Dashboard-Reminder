@@ -3,7 +3,7 @@ import {
   watchAuth, startSessionTimeoutWatch, isAdmin, currentUser
 } from "./auth.js";
 import * as dash from "./dashboard.js";
-import { seedInitialData } from "./seed-data.js";
+import { seedInitialData, seedNextFiscalYear } from "./seed-data.js";
 
 let activeUnsubs = [];
 // True while the "create administrator" screen should be the one showing
@@ -111,10 +111,17 @@ window.appLogout = async () => { await logout(); };
 
 // ── Admin: run initial data import ──────────────────────────────
 window.appRunSeed = async () => {
-  if (!confirm('Import the original Excel-based dataset into the shared database? This can only be run once.')) return;
+  if (!confirm('Import the original Excel-based FY 2025-26 dataset into the shared database? This can only be run once.')) return;
   try {
     const n = await seedInitialData();
     alert(`Imported ${n} records.`);
+  } catch (e) { alert(e.message); }
+};
+window.appRunSeedNextYear = async () => {
+  if (!confirm('Import the FY 2026-27 compliance calendar (dates shifted one year forward from FY 2025-26)? This can only be run once.')) return;
+  try {
+    const n = await seedNextFiscalYear();
+    alert(`Imported ${n} records for FY 2026-27.`);
   } catch (e) { alert(e.message); }
 };
 
@@ -143,6 +150,7 @@ window.appSaveUserEdit = dash.saveUserEdit;
 window.appDeleteUser = dash.deleteUserUI;
 window.appJumpToSearchResult = dash.jumpToSearchResult;
 window.clearGlobalSearch = dash.clearGlobalSearch;
+window.switchFiscalYear = dash.switchFiscalYear;
 
 // ── Global search wiring ──────────────────────────────────────────
 const searchInput = document.getElementById('globalSearchInput');

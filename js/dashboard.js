@@ -19,6 +19,18 @@ let activeLicFilter = 'all';
 let currentAddSection = 'monthly';
 let reminderDays = 7;
 
+// Indian fiscal year: 1 Apr – 31 Mar. "2026-27" means Apr 2026–Mar 2027.
+// Licenses aren't tagged with a fiscal year — a license's validity isn't
+// tied to one FY the way a monthly/quarterly/yearly filing is, so the
+// Licenses tab always shows everything regardless of the switcher below.
+function computeFiscalYear(date) {
+  if (!date) return null;
+  const y = date.getFullYear(), m = date.getMonth(); // 0-indexed, April = 3
+  return m >= 3 ? `${y}-${String(y + 1).slice(2)}` : `${y - 1}-${String(y).slice(2)}`;
+}
+let activeFiscalYear = computeFiscalYear(new Date());
+function fyLabel(fy) { return fy ? `FY ${fy}` : '–'; }
+
 function fmt(d) { return (!d || isNaN(d)) ? '–' : d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }); }
 function fmtShort(d) { return (!d || isNaN(d)) ? '–' : d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }); }
 function fmtDateTime(d) { return (!d || isNaN(d)) ? '–' : d.toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
@@ -52,29 +64,30 @@ function delBtnHtml(id, type, summary) {
 // SUBSCRIPTIONS
 // ═══════════════════════════════════════════
 export function initDashboard() {
+  document.querySelectorAll('.fy-switch-btn').forEach(b => b.classList.toggle('active', b.dataset.fy === activeFiscalYear));
   const unsubs = [];
   unsubs.push(subscribeRecords('monthly', rows => {
-    monthly = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, date: toDate(r.fields.date) }));
+    monthly = rows.map(r => { const date = toDate(r.fields.date); return { id: r.id, done: r.done, ...r.fields, date, fiscalYear: r.fields.fiscalYear || computeFiscalYear(date) }; });
     buildLocFilter(); buildMonthTabs(); renderMonthlyTable(activeMonthIdx); updateSummary(); buildReminders();
   }));
   unsubs.push(subscribeRecords('quarterly', rows => {
-    quarterly = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, due: toDate(r.fields.due) }));
+    quarterly = rows.map(r => { const due = toDate(r.fields.due); return { id: r.id, done: r.done, ...r.fields, due, fiscalYear: r.fields.fiscalYear || computeFiscalYear(due) }; });
     renderQuarterlyTable();
   }));
   unsubs.push(subscribeRecords('clra', rows => {
-    clra = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, due: toDate(r.fields.due) }));
+    clra = rows.map(r => { const due = toDate(r.fields.due); return { id: r.id, done: r.done, ...r.fields, due, fiscalYear: r.fields.fiscalYear || computeFiscalYear(due) }; });
     renderQuarterlyTable();
   }));
   unsubs.push(subscribeRecords('halfyearly_esic', rows => {
-    hyEsic = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, due: toDate(r.fields.due) }));
+    hyEsic = rows.map(r => { const due = toDate(r.fields.due); return { id: r.id, done: r.done, ...r.fields, due, fiscalYear: r.fields.fiscalYear || computeFiscalYear(due) }; });
     renderHalfYearlyTables();
   }));
   unsubs.push(subscribeRecords('halfyearly_pt', rows => {
-    hyPt = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, due: toDate(r.fields.due) }));
+    hyPt = rows.map(r => { const due = toDate(r.fields.due); return { id: r.id, done: r.done, ...r.fields, due, fiscalYear: r.fields.fiscalYear || computeFiscalYear(due) }; });
     renderHalfYearlyTables();
   }));
   unsubs.push(subscribeRecords('yearly', rows => {
-    yearly = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, dateObj: toDate(r.fields.dateObj) }));
+    yearly = rows.map(r => { const dateObj = toDate(r.fields.dateObj); return { id: r.id, done: r.done, ...r.fields, dateObj, fiscalYear: r.fields.fiscalYear || computeFiscalYear(dateObj) }; });
     renderYearlyTable();
   }));
   unsubs.push(subscribeRecords('license', rows => {
@@ -110,12 +123,24 @@ function switchTabById(id) {
 }
 
 // ═══════════════════════════════════════════
+// FISCAL YEAR SWITCHER
+// ═══════════════════════════════════════════
+export function switchFiscalYear(fy) {
+  activeFiscalYear = fy;
+  document.querySelectorAll('.fy-switch-btn').forEach(b => b.classList.toggle('active', b.dataset.fy === fy));
+  buildLocFilter(); buildMonthTabs(); renderMonthlyTable(activeMonthIdx); updateSummary();
+  renderQuarterlyTable(); renderHalfYearlyTables(); renderYearlyTable();
+}
+
+export function getActiveFiscalYear() { return activeFiscalYear; }
+
+// ═══════════════════════════════════════════
 // MONTHLY TABLE
 // ═══════════════════════════════════════════
 function buildLocFilter() {
   const wrap = document.getElementById('locFilterWrap');
   if (!wrap) return;
-  const allLocs = ['all', ...new Set(monthly.map(d => d.loc))].filter(Boolean);
+  const allLocs = ['all', ...new Set(monthly.filter(d => d.fiscalYear === activeFiscalYear).map(d => d.loc))].filter(Boolean);
   let html = '<span class="loc-filter-label">Location:</span>';
   allLocs.forEach(l => {
     const lbl = l === 'all' ? 'All' : l;
@@ -141,13 +166,14 @@ function renderMonthlyTable(mIdx) {
   const tbody = document.getElementById('complianceTbody');
   if (!tbody) return;
   let filtered = monthly
+    .filter(d => d.fiscalYear === activeFiscalYear)
     .filter(d => d.date && d.date.getMonth() === mIdx)
     .filter(d => activeCatFilter === 'all' || d.cat === activeCatFilter)
     .filter(d => activeLocFilter === 'all' || d.loc === activeLocFilter)
     .sort((a,b) => a.date - b.date);
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No compliance items for this month / filter.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No compliance items for this month / filter${monthly.some(d=>d.fiscalYear===activeFiscalYear) ? '' : ' — nothing imported for ' + fyLabel(activeFiscalYear) + ' yet'}.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(item => {
@@ -180,7 +206,7 @@ function buildMonthTabs() {
   const tabs = document.getElementById('monthTabs');
   if (!tabs) return;
   const overdueMonths = new Set();
-  monthly.forEach(item => { if (!item.done && item.date && getStatus(item.date) === 'overdue') overdueMonths.add(item.date.getMonth()); });
+  monthly.forEach(item => { if (item.fiscalYear === activeFiscalYear && !item.done && item.date && getStatus(item.date) === 'overdue') overdueMonths.add(item.date.getMonth()); });
   tabs.innerHTML = '';
   months.forEach((m, i) => {
     const btn = document.createElement('div');
@@ -198,7 +224,7 @@ function buildMonthTabs() {
 function updateSummary() {
   const today = new Date(); today.setHours(0,0,0,0);
   let overdue=0, thisMonth=0, upcoming=0, pf=0, esi=0, other=0;
-  monthly.forEach(item => {
+  monthly.filter(item => item.fiscalYear === activeFiscalYear).forEach(item => {
     if (!item.done && item.date) {
       const d = new Date(item.date); d.setHours(0,0,0,0);
       const diff = (d - today) / 86400000;
@@ -220,7 +246,7 @@ function updateSummary() {
 function renderQuarterlyTable() {
   const tbody = document.getElementById('quarterlyTbody');
   if (tbody) {
-    tbody.innerHTML = quarterly.map((row, i) => {
+    tbody.innerHTML = quarterly.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
       const status = getStatus(row.due);
       const period = row.from && row.to ? `${row.from} – ${row.to}` : (row.period || '–');
       return `<tr data-record-id="${row.id}">
@@ -236,7 +262,7 @@ function renderQuarterlyTable() {
   }
   const clraTbody = document.getElementById('clraTbody');
   if (clraTbody) {
-    clraTbody.innerHTML = clra.map((row, i) => {
+    clraTbody.innerHTML = clra.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
       const status = getStatus(row.due);
       return `<tr data-record-id="${row.id}">
         <td>${i+1}</td>
@@ -265,7 +291,7 @@ function renderHalfYearlyTables() {
   const esicTbody = document.getElementById('halfYearlyEsicTbody');
   if (esicTbody) {
     const doneClass = v => v === 'Done' ? `<span style="color:var(--upcoming);font-weight:600">✓</span>` : `<span style="color:#d1d5db">–</span>`;
-    esicTbody.innerHTML = hyEsic.map((row, i) => {
+    esicTbody.innerHTML = hyEsic.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
       const status = getStatus(row.due);
       return `<tr data-record-id="${row.id}">
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
@@ -277,7 +303,7 @@ function renderHalfYearlyTables() {
   }
   const ptTbody = document.getElementById('halfYearlyPtTbody');
   if (ptTbody) {
-    ptTbody.innerHTML = hyPt.map((row,i) => {
+    ptTbody.innerHTML = hyPt.filter(r => r.fiscalYear === activeFiscalYear).map((row,i) => {
       const status = getStatus(row.due);
       return `<tr data-record-id="${row.id}">
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
@@ -293,7 +319,7 @@ function renderHalfYearlyTables() {
 function renderYearlyTable() {
   const tbody = document.getElementById('yearlyTbody');
   if (!tbody) return;
-  tbody.innerHTML = yearly.map((row,i) => {
+  tbody.innerHTML = yearly.filter(r => r.fiscalYear === activeFiscalYear).map((row,i) => {
     const status = row.dateObj ? getStatus(row.dateObj) : 'upcoming';
     const doneClass = v => v === '✓' ? `<span style="color:var(--upcoming);font-weight:700">✓</span>` : `<span style="color:#d1d5db;font-size:11px">${esc(v)||'–'}</span>`;
     return `<tr data-record-id="${row.id}">
@@ -414,16 +440,17 @@ export async function saveNewEntry() {
   const loc = document.getElementById('f-loc').value;
   const notes = document.getElementById('f-notes').value.trim();
   const dateObj = new Date(dateVal);
+  const fiscalYear = computeFiscalYear(dateObj);
 
   try {
     if (currentAddSection === 'monthly') {
-      await addRecord('monthly', { date: dateObj, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes }, desc);
+      await addRecord('monthly', { date: dateObj, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes, fiscalYear }, desc);
     } else if (currentAddSection === 'quarterly') {
-      await addRecord('quarterly', { loc, period: desc, due: dateObj, submitted: '', note: notes }, desc);
+      await addRecord('quarterly', { loc, period: desc, due: dateObj, submitted: '', note: notes, fiscalYear }, desc);
     } else if (currentAddSection === 'halfyearly') {
-      await addRecord('halfyearly_pt', { loc, period: desc, due: dateObj, status: '' }, desc);
+      await addRecord('halfyearly_pt', { loc, period: desc, due: dateObj, status: '', fiscalYear }, desc);
     } else if (currentAddSection === 'yearly') {
-      await addRecord('yearly', { name: desc, act: notes || '–', due: dateVal, mode: '–', loc, blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj }, desc);
+      await addRecord('yearly', { name: desc, act: notes || '–', due: dateVal, mode: '–', loc, blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj, fiscalYear }, desc);
     }
     closeModal('addModal');
     ['f-date','f-desc','f-notes'].forEach(id => document.getElementById(id).value = '');
@@ -632,13 +659,13 @@ const TYPE_ICON = {
 
 function buildSearchIndex() {
   const rows = [];
-  monthly.forEach(i => rows.push({ id: i.id, type: 'monthly', title: i.desc, sub: `${fmt(i.date)} · ${i.loc || ''}`, monthIdx: i.date ? i.date.getMonth() : null, text: `${i.desc} ${i.loc} ${i.cat}`.toLowerCase() }));
-  quarterly.forEach(i => { const period = i.from && i.to ? `${i.from} – ${i.to}` : (i.period || ''); rows.push({ id: i.id, type: 'quarterly', title: `${i.loc || 'ER-1'} Return`, sub: `${fmt(i.due)} · ${period}`, text: `${i.loc} ${period} er-1 quarterly`.toLowerCase() }); });
-  clra.forEach(i => rows.push({ id: i.id, type: 'clra', title: `${i.loc || 'CLRA'} Return`, sub: `${fmt(i.due)} · ${i.contractors || ''}`, text: `${i.loc} ${i.contractors} ${i.period} clra`.toLowerCase() }));
-  hyEsic.forEach(i => rows.push({ id: i.id, type: 'halfyearly_esic', title: 'ESIC Half-Yearly Return', sub: `${fmt(i.due)} · ${i.period || ''}`, text: `esic half yearly ${i.period}`.toLowerCase() }));
-  hyPt.forEach(i => rows.push({ id: i.id, type: 'halfyearly_pt', title: `Professional Tax – ${i.loc || ''}`, sub: `${fmt(i.due)} · ${i.period || ''}`, text: `professional tax ${i.loc} ${i.period}`.toLowerCase() }));
-  yearly.forEach(i => rows.push({ id: i.id, type: 'yearly', title: i.name, sub: `${i.due || ''} · ${i.act || ''}`, text: `${i.name} ${i.act} ${i.mode}`.toLowerCase() }));
-  licenses.forEach(i => rows.push({ id: i.id, type: 'license', title: i.company, sub: `${i.type} · ${i.loc || ''}`, text: `${i.company} ${i.type} ${i.loc} license`.toLowerCase() }));
+  monthly.forEach(i => rows.push({ id: i.id, type: 'monthly', fiscalYear: i.fiscalYear, title: i.desc, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.date)} · ${i.loc || ''}`, monthIdx: i.date ? i.date.getMonth() : null, text: `${i.desc} ${i.loc} ${i.cat}`.toLowerCase() }));
+  quarterly.forEach(i => { const period = i.from && i.to ? `${i.from} – ${i.to}` : (i.period || ''); rows.push({ id: i.id, type: 'quarterly', fiscalYear: i.fiscalYear, title: `${i.loc || 'ER-1'} Return`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${period}`, text: `${i.loc} ${period} er-1 quarterly`.toLowerCase() }); });
+  clra.forEach(i => rows.push({ id: i.id, type: 'clra', fiscalYear: i.fiscalYear, title: `${i.loc || 'CLRA'} Return`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.contractors || ''}`, text: `${i.loc} ${i.contractors} ${i.period} clra`.toLowerCase() }));
+  hyEsic.forEach(i => rows.push({ id: i.id, type: 'halfyearly_esic', fiscalYear: i.fiscalYear, title: 'ESIC Half-Yearly Return', sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.period || ''}`, text: `esic half yearly ${i.period}`.toLowerCase() }));
+  hyPt.forEach(i => rows.push({ id: i.id, type: 'halfyearly_pt', fiscalYear: i.fiscalYear, title: `Professional Tax – ${i.loc || ''}`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.period || ''}`, text: `professional tax ${i.loc} ${i.period}`.toLowerCase() }));
+  yearly.forEach(i => rows.push({ id: i.id, type: 'yearly', fiscalYear: i.fiscalYear, title: i.name, sub: `${fyLabel(i.fiscalYear)} · ${i.due || ''} · ${i.act || ''}`, text: `${i.name} ${i.act} ${i.mode}`.toLowerCase() }));
+  licenses.forEach(i => rows.push({ id: i.id, type: 'license', fiscalYear: null, title: i.company, sub: `${i.type} · ${i.loc || ''}`, text: `${i.company} ${i.type} ${i.loc} license`.toLowerCase() }));
   return rows;
 }
 
@@ -686,6 +713,11 @@ export function jumpToSearchResult(idx) {
   if (!r) return;
   clearGlobalSearch();
 
+  if (r.fiscalYear && r.fiscalYear !== activeFiscalYear) {
+    activeFiscalYear = r.fiscalYear;
+    document.querySelectorAll('.fy-switch-btn').forEach(b => b.classList.toggle('active', b.dataset.fy === r.fiscalYear));
+  }
+
   const tabId = TYPE_TO_TAB[r.type];
   if (tabId) switchTabById(tabId);
 
@@ -695,10 +727,16 @@ export function jumpToSearchResult(idx) {
     activeLocFilter = 'all';
     document.querySelectorAll('#panel-monthly .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     document.querySelectorAll('#locFilterWrap .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+    buildLocFilter();
     renderMonthlyTable(r.monthIdx);
     buildMonthTabs();
-  }
-  if (r.type === 'license') {
+  } else if (r.type === 'quarterly' || r.type === 'clra') {
+    renderQuarterlyTable();
+  } else if (r.type === 'halfyearly_esic' || r.type === 'halfyearly_pt') {
+    renderHalfYearlyTables();
+  } else if (r.type === 'yearly') {
+    renderYearlyTable();
+  } else if (r.type === 'license') {
     activeLicFilter = 'all';
     document.querySelectorAll('#panel-licenses .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     renderLicenses();

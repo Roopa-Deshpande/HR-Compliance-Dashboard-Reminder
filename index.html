@@ -60,10 +60,14 @@
     <div class="topbar-logo">EB</div>
     <div>
       <div class="topbar-title">HR Compliance Dashboard</div>
-      <div class="topbar-sub">Evolve Back · Karnataka · FY 2025–26</div>
+      <div class="topbar-sub">Evolve Back · Karnataka</div>
     </div>
   </div>
   <div class="topbar-right">
+    <div class="fy-switcher" id="fySwitcher">
+      <button class="fy-switch-btn" data-fy="2025-26" onclick="switchFiscalYear('2025-26')">FY 25-26</button>
+      <button class="fy-switch-btn" data-fy="2026-27" onclick="switchFiscalYear('2026-27')">FY 26-27</button>
+    </div>
     <span class="today-badge" id="todayBadge"></span>
     <div class="user-badge">
       <div class="user-badge-avatar" id="userBadgeAvatar">?</div>
@@ -323,8 +327,10 @@
 
   <div class="admin-panel-wrap">
     <h3>Data Import</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Run once, on a fresh database, to load the original Excel-based compliance dataset. Safe to click — it refuses to run if records already exist.</p>
-    <button class="add-row-btn" onclick="appRunSeed()">⬇️ Import Initial Dataset</button>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Run once, on a fresh database, to load the original Excel-based FY 2025-26 compliance dataset (including the license tracker). Safe to click — it refuses to run if records already exist.</p>
+    <button class="add-row-btn" onclick="appRunSeed()">⬇️ Import Initial Dataset (FY 2025-26)</button>
+    <p style="font-size:12px;color:var(--text-muted);margin:16px 0 12px">Load the FY 2026-27 recurring compliance calendar — same categories and pattern as FY 2025-26, dates shifted forward one year. Licenses aren't duplicated (they're shared across years). Safe to click — it refuses to run if FY 2026-27 records already exist.</p>
+    <button class="add-row-btn" onclick="appRunSeedNextYear()">⬇️ Import FY 2026-27 Dataset</button>
   </div>
 
   <div class="admin-panel-wrap">
