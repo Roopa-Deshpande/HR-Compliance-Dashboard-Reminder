@@ -3,7 +3,6 @@ import {
   watchAuth, startSessionTimeoutWatch, isAdmin, currentUser
 } from "./auth.js";
 import * as dash from "./dashboard.js";
-import { showToast, showConfirm } from "./dashboard.js";
 import { seedInitialData, seedNextFiscalYear } from "./seed-data.js";
 
 let activeUnsubs = [];
@@ -102,9 +101,9 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
 document.getElementById('forgotPasswordLink')?.addEventListener('click', async (e) => {
   e.preventDefault();
   const email = document.getElementById('login-email').value.trim();
-  if (!email) { showToast('Enter your email above first, then click "Forgot password?"', 'error'); return; }
-  try { await resetPassword(email); showToast('Password reset email sent to ' + email, 'success'); }
-  catch (err) { showToast('Could not send reset email: ' + err.message, 'error'); }
+  if (!email) { alert('Enter your email above first, then click "Forgot password?"'); return; }
+  try { await resetPassword(email); alert('Password reset email sent to ' + email); }
+  catch (err) { alert('Could not send reset email: ' + err.message); }
 });
 
 // ── Logout ────────────────────────────────────────────────────────
@@ -112,18 +111,18 @@ window.appLogout = async () => { await logout(); };
 
 // ── Admin: run initial data import ──────────────────────────────
 window.appRunSeed = async () => {
-  if (!(await showConfirm('Import the original Excel-based FY 2025-26 dataset into the shared database? This can only be run once.', { title: 'Import initial dataset', confirmLabel: 'Import' }))) return;
+  if (!confirm('Import the original Excel-based FY 2025-26 dataset into the shared database? This can only be run once.')) return;
   try {
     const n = await seedInitialData();
-    showToast(`Imported ${n} records.`, 'success');
-  } catch (e) { showToast(e.message, 'error'); }
+    alert(`Imported ${n} records.`);
+  } catch (e) { alert(e.message); }
 };
 window.appRunSeedNextYear = async () => {
-  if (!(await showConfirm('Import the FY 2026-27 compliance calendar (dates shifted one year forward from FY 2025-26)? This can only be run once.', { title: 'Import FY 2026-27 dataset', confirmLabel: 'Import' }))) return;
+  if (!confirm('Import the FY 2026-27 compliance calendar (dates shifted one year forward from FY 2025-26)? This can only be run once.')) return;
   try {
     const n = await seedNextFiscalYear();
-    showToast(`Imported ${n} records for FY 2026-27.`, 'success');
-  } catch (e) { showToast(e.message, 'error'); }
+    alert(`Imported ${n} records for FY 2026-27.`);
+  } catch (e) { alert(e.message); }
 };
 
 // ── Expose dashboard functions for inline HTML handlers ──────────
@@ -152,27 +151,6 @@ window.appDeleteUser = dash.deleteUserUI;
 window.appJumpToSearchResult = dash.jumpToSearchResult;
 window.clearGlobalSearch = dash.clearGlobalSearch;
 window.switchFiscalYear = dash.switchFiscalYear;
-
-// ── Sidebar (desktop collapse + mobile drawer) ────────────────────
-window.toggleSidebarCollapse = () => {
-  document.getElementById('sidebarEl')?.classList.toggle('collapsed');
-};
-window.openMobileSidebar = () => {
-  document.getElementById('sidebarEl')?.classList.add('mobile-open');
-  document.getElementById('sidebarScrim')?.classList.add('show');
-};
-window.closeMobileSidebar = () => {
-  document.getElementById('sidebarEl')?.classList.remove('mobile-open');
-  document.getElementById('sidebarScrim')?.classList.remove('show');
-};
-// Closing the mobile drawer after picking a nav item keeps behavior
-// identical to the old top-tab bar (tap a tab, see the panel) instead of
-// leaving the drawer open over the content on small screens.
-document.querySelectorAll('.main-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    if (window.matchMedia('(max-width: 900px)').matches) window.closeMobileSidebar();
-  });
-});
 
 // ── Global search wiring ──────────────────────────────────────────
 const searchInput = document.getElementById('globalSearchInput');
