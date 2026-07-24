@@ -53,308 +53,410 @@
      APP SHELL (dashboard, shown after login)
 ════════════════════════════════════════ -->
 <div id="appShell" style="display:none">
+<div class="app-shell">
 
-<!-- TOP BAR -->
-<div class="topbar">
-  <div class="topbar-brand">
-    <div class="topbar-logo">EB</div>
-    <div>
-      <div class="topbar-title">HR Compliance Dashboard</div>
-      <div class="topbar-sub">Evolve Back · Karnataka</div>
-    </div>
-  </div>
-  <div class="topbar-right">
-    <div class="fy-switcher" id="fySwitcher">
-      <button class="fy-switch-btn" data-fy="2025-26" onclick="switchFiscalYear('2025-26')">FY 25-26</button>
-      <button class="fy-switch-btn" data-fy="2026-27" onclick="switchFiscalYear('2026-27')">FY 26-27</button>
-    </div>
-    <span class="today-badge" id="todayBadge"></span>
-    <div class="user-badge">
-      <div class="user-badge-avatar" id="userBadgeAvatar">?</div>
-      <div>
-        <div class="user-badge-name" id="userBadgeName">–</div>
-        <div class="user-badge-role" id="userBadgeRole">–</div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebarEl">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">EB</div>
+      <div class="sidebar-brand-text">
+        <div class="sidebar-title">HR Compliance</div>
+        <div class="sidebar-sub">Evolve Back · Karnataka</div>
       </div>
     </div>
-    <button class="topbar-btn" onclick="toggleSharePanel()">📤 Share</button>
-    <button class="topbar-btn" onclick="appLogout()">🚪 Logout</button>
-  </div>
-</div>
 
-<!-- GLOBAL SEARCH -->
-<div class="global-search-bar">
-  <div class="global-search-wrap">
-    <span class="global-search-icon">🔍</span>
-    <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search compliance items, licenses, locations..." autocomplete="off">
-    <button class="global-search-clear" id="globalSearchClear" style="display:none" onclick="clearGlobalSearch()">×</button>
-    <div class="global-search-results" id="globalSearchResults"></div>
-  </div>
-</div>
-
-<!-- REMINDER BANNER -->
-<div class="reminder-banner" id="reminderBanner">
-  <div class="reminder-banner-icon">⏰</div>
-  <div class="reminder-banner-content">
-    <div class="reminder-banner-title">Upcoming Compliance Reminders</div>
-    <div class="reminder-banner-list" id="reminderBannerList"></div>
-  </div>
-  <button class="reminder-banner-close" onclick="document.getElementById('reminderBanner').classList.remove('show')">×</button>
-</div>
-
-<!-- MAIN NAV TABS -->
-<div class="main-tabs">
-  <div class="main-tab active" data-tab="monthly" onclick="switchTab('monthly',this)">📅 Monthly Returns <span class="tab-count" id="tc-monthly">0</span></div>
-  <div class="main-tab" data-tab="quarterly" onclick="switchTab('quarterly',this)">📊 Quarterly Returns</div>
-  <div class="main-tab" data-tab="halfyearly" onclick="switchTab('halfyearly',this)">🗓️ Half-Yearly Returns</div>
-  <div class="main-tab" data-tab="yearly" onclick="switchTab('yearly',this)">📋 Yearly Returns</div>
-  <div class="main-tab" data-tab="licenses" onclick="switchTab('licenses',this)">🏛️ Licenses <span class="tab-count" id="tc-lic">0</span></div>
-  <div class="main-tab" data-tab="audit" onclick="switchTab('audit',this)">🕒 Activity Log</div>
-  <div class="main-tab admin-only" data-tab="admin" style="display:none" onclick="switchTab('admin',this)">⚙️ Admin</div>
-</div>
-
-<div class="page-wrap">
-
-<!-- MONTHLY RETURNS TAB -->
-<div class="tab-panel active" id="panel-monthly">
-  <div class="summary-row">
-    <div class="stat-card danger"><div class="label">Overdue</div><div class="value" id="cnt-overdue">0</div><div class="sub">Past due date</div></div>
-    <div class="stat-card warn"><div class="label">Due This Month</div><div class="value" id="cnt-month">0</div><div class="sub">Current month</div></div>
-    <div class="stat-card ok"><div class="label">Next 30 Days</div><div class="value" id="cnt-upcoming">0</div><div class="sub">Upcoming</div></div>
-    <div class="stat-card"><div class="label">PF Entries</div><div class="value" style="color:var(--pf-color)" id="cnt-pf">0</div><div class="sub">Remittances + Returns</div></div>
-    <div class="stat-card"><div class="label">ESI Entries</div><div class="value" style="color:var(--esi-color)" id="cnt-esi">0</div><div class="sub">Payments + Returns</div></div>
-    <div class="stat-card"><div class="label">PT / Other</div><div class="value" style="color:var(--pt-color)" id="cnt-other">0</div><div class="sub">PT · LWF · Gratuity</div></div>
-  </div>
-
-  <div class="legend">
-    <div class="legend-item"><span class="legend-dot" style="background:var(--overdue)"></span>Overdue</div>
-    <div class="legend-item"><span class="legend-dot" style="background:var(--due-soon)"></span>Due within 7 days</div>
-    <div class="legend-item"><span class="legend-dot" style="background:var(--upcoming)"></span>Upcoming</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#9CA3AF"></span>Done</div>
-    <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
-      <span class="cat-badge cat-pf">PF</span><span class="cat-badge cat-esi">ESI</span><span class="cat-badge cat-pt">Prof. Tax</span>
-      <span class="cat-badge cat-lwf">LWF</span><span class="cat-badge cat-grat">Gratuity</span><span class="cat-badge cat-bonus">Bonus</span>
-    </div>
-  </div>
-
-  <div class="loc-filter-wrap" id="locFilterWrap"><span class="loc-filter-label">Location:</span></div>
-
-  <div class="section-head">
-    <div class="section-title">Month-wise Compliance</div>
-    <div class="filter-row">
-      <button class="filter-btn active" onclick="filterCat('all',this)">All</button>
-      <button class="filter-btn" onclick="filterCat('PF',this)">PF</button>
-      <button class="filter-btn" onclick="filterCat('ESI',this)">ESI</button>
-      <button class="filter-btn" onclick="filterCat('PT',this)">Prof. Tax</button>
-      <button class="filter-btn" onclick="filterCat('LWF',this)">LWF</button>
-      <button class="add-row-btn" onclick="openAddModal('monthly')">＋ Add Entry</button>
-    </div>
-  </div>
-
-  <div class="month-tabs" id="monthTabs"></div>
-
-  <div class="compliance-table-wrap">
-    <table class="compliance-table">
-      <thead><tr><th style="width:32px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:60px"></th></tr></thead>
-      <tbody id="complianceTbody"></tbody>
-    </table>
-  </div>
-
-  <div class="static-section">
-    <h3>Payment of Gratuity – Key Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">Gratuity Registration (Form A)</div><div class="due">Within 30 days of applicability</div><div class="detail">Required when establishment has 10+ employees.</div></div>
-      <div class="static-card"><div class="activity">Notice of Change (Form B)</div><div class="due">Within 30 days of any change</div><div class="detail">Report any change in name, address, or nature of business.</div></div>
-      <div class="static-card"><div class="activity">Employee Nomination (Form F)</div><div class="due">Within 30 days of 1 year service</div><div class="detail">Employee submits nomination for gratuity benefits.</div></div>
-      <div class="static-card"><div class="activity">Gratuity Payment (Form I / L)</div><div class="due">Within 30 days of eligibility</div><div class="detail">Employee applies via Form I; Employer responds via Form L.</div></div>
-      <div class="static-card"><div class="activity">Annual Return (Form R)</div><div class="due">31st January each year</div><div class="detail">Details of gratuity payments made during previous year.</div></div>
-      <div class="static-card"><div class="activity">Gratuity on Death (Form J / K)</div><div class="due">Within 30 days of claim</div><div class="detail">Nominee or legal heir files Form J / Form K.</div></div>
-    </div>
-  </div>
-  <div class="static-section">
-    <h3>Payment of Bonus – Key Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">Allocable Surplus (Form A)</div><div class="due">Before payment of bonus</div><div class="detail">Calculate and record allocable surplus before paying bonus.</div></div>
-      <div class="static-card"><div class="activity">Set-on / Set-off (Form B)</div><div class="due">Before payment of bonus</div><div class="detail">Determines surplus carried forward or deficit set off.</div></div>
-      <div class="static-card"><div class="activity">Bonus Register (Form C)</div><div class="due">Within 8 months of FY end</div><div class="detail">Details bonus payments to eligible employees.</div></div>
-      <div class="static-card"><div class="activity">Annual Return (Form D)</div><div class="due">30th December each year</div><div class="detail">Filed with labour department, summarising bonus payments.</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- QUARTERLY RETURNS TAB -->
-<div class="tab-panel" id="panel-quarterly">
-  <div class="section-head">
-    <div class="section-title">Quarterly Returns</div>
-    <button class="add-row-btn" onclick="openAddModal('quarterly')">＋ Add Entry</button>
-  </div>
-  <div class="period-section">
-    <div class="period-section-header"><h4>Employment Exchange Returns (Form ER-1) – All Locations (25+ Employees)</h4><span class="cat-badge cat-se" style="font-size:11px">S&E Act</span></div>
-    <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Location</th><th>Period</th><th>Due Date</th><th>Submitted On</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody id="quarterlyTbody"></tbody>
-    </table></div>
-  </div>
-  <div class="period-section">
-    <div class="period-section-header"><h4>Contract Labour (CLRA) – Quarterly Returns</h4><span class="cat-badge cat-clra" style="font-size:11px">CLRA Act</span></div>
-    <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Location</th><th>Contractors</th><th>Period</th><th>Due Date</th><th>Status</th></tr></thead>
-      <tbody id="clraTbody"></tbody>
-    </table></div>
-  </div>
-  <div class="static-section">
-    <h3>Karnataka S&E Act – Quarterly Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">Employment Exchange Return (ER-1)</div><div class="due">Quarterly – 30 days after quarter end</div><div class="detail">Applicable to establishments with 25+ employees under Employment Exchanges (Compulsory Notification of Vacancies) Act, 1959.</div></div>
-      <div class="static-card"><div class="activity">CLRA Contractor Register Verification</div><div class="due">Quarterly – internal review</div><div class="detail">Verify Register of Contractors (Form XII) and ensure all contractors are licensed (20+ workers threshold).</div></div>
-      <div class="static-card"><div class="activity">Minimum Wages – Quarterly Return</div><div class="due">Quarterly – as per state notification</div><div class="detail">Submit wage returns to the Labour Department as required by Karnataka state rules.</div></div>
-      <div class="static-card"><div class="activity">Inter-State Migrant Workmen Return</div><div class="due">Half-yearly / Quarterly</div><div class="detail">Return of interstate migrant workmen if 5+ such workers are employed. Form XIV to the Labour Commissioner.</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- HALF-YEARLY RETURNS TAB -->
-<div class="tab-panel" id="panel-halfyearly">
-  <div class="section-head">
-    <div class="section-title">Half-Yearly Returns</div>
-    <button class="add-row-btn" onclick="openAddModal('halfyearly')">＋ Add Entry</button>
-  </div>
-  <div class="period-section">
-    <div class="period-section-header"><h4>ESIC Half-Yearly Returns</h4><span class="cat-badge cat-esi" style="font-size:11px">ESIC</span></div>
-    <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects BLR</th><th>Earthitects WD</th><th>Terralife</th><th>Status</th></tr></thead>
-      <tbody id="halfYearlyEsicTbody"></tbody>
-    </table></div>
-  </div>
-  <div class="period-section">
-    <div class="period-section-header"><h4>Professional Tax – Half-Yearly (Wayanad / Kerala)</h4><span class="cat-badge cat-pt" style="font-size:11px">Prof. Tax</span></div>
-    <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>Location</th><th>Status</th></tr></thead>
-      <tbody id="halfYearlyPtTbody"></tbody>
-    </table></div>
-  </div>
-  <div class="static-section">
-    <h3>Karnataka S&E Act – Half-Yearly Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">ESIC Half-Yearly Return</div><div class="due">Nov 11 (Apr–Sep) · May 11 (Oct–Mar)</div><div class="detail">Form 6 – Half-yearly return required under ESI Act, 1948 for all registered establishments.</div></div>
-      <div class="static-card"><div class="activity">Contract Labour – Half-Yearly Return</div><div class="due">Applicable when CLRA triggered</div><div class="detail">Contractor's return to principal employer and licencing officer under CLRA, 1970.</div></div>
-      <div class="static-card"><div class="activity">Inter-State Migrant Workmen – Half-Yearly</div><div class="due">Half-yearly – Form XIV</div><div class="detail">If 5+ inter-state migrant workers employed; submit return to Assistant Labour Commissioner.</div></div>
-      <div class="static-card"><div class="activity">Apprentice Act Return</div><div class="due">Half-yearly – April & October</div><div class="detail">Return of apprentices engaged under Apprentices Act, 1961. Filed with RDAT / State Apprenticeship Adviser.</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- YEARLY RETURNS TAB -->
-<div class="tab-panel" id="panel-yearly">
-  <div class="section-head">
-    <div class="section-title">Yearly / Annual Returns</div>
-    <button class="add-row-btn" onclick="openAddModal('yearly')">＋ Add Entry</button>
-  </div>
-  <div class="period-section">
-    <div class="period-section-header"><h4>Annual Returns Tracker – All Locations</h4></div>
-    <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Return / Filing</th><th>Act / Authority</th><th>Due Date</th><th>Mode</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects</th><th>Terralife</th><th>Others</th><th>Status</th></tr></thead>
-      <tbody id="yearlyTbody"></tbody>
-    </table></div>
-  </div>
-  <div class="static-section">
-    <h3>Karnataka S&E Act – Additional Annual Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">S&E Annual Return (Form Q)</div><div class="due">31st January every year</div><div class="detail">Annual return under Karnataka Shops & Commercial Establishments Act, 1961 – submission to Inspector of Shops.</div></div>
-      <div class="static-card"><div class="activity">Minimum Wages Annual Return (Form III)</div><div class="due">31st January</div><div class="detail">Under Minimum Wages Act, 1948. Details of wage payments and working hours submitted online.</div></div>
-      <div class="static-card"><div class="activity">CLRA Annual Return</div><div class="due">31st January / as notified</div><div class="detail">Principal Employer's Annual Return to registering officer under CLRA, 1970. Form XXIV (as per rules).</div></div>
-      <div class="static-card"><div class="activity">ESIC – Form 1A Annual Return</div><div class="due">If any changes to address / bank / directors</div><div class="detail">Annual changes to employer registration details submitted to ESIC office.</div></div>
-      <div class="static-card"><div class="activity">Equal Remuneration – Form D</div><div class="due">31st January</div><div class="detail">Annual return under Equal Remuneration Act, 1976 showing male/female employee details and wages paid.</div></div>
-      <div class="static-card"><div class="activity">Maternity Benefit – Annual Return</div><div class="due">31st December</div><div class="detail">Return of maternity benefits paid to women employees in preceding year.</div></div>
-      <div class="static-card"><div class="activity">She-Box / POSH Return</div><div class="due">31st January</div><div class="detail">Annual report of ICC (Internal Complaints Committee) under POSH Act, 2013. Submit online via She-Box portal.</div></div>
-      <div class="static-card"><div class="activity">Standing Orders – Form 5A</div><div class="due">Once certified; review on change</div><div class="detail">Under Industrial Employment (Standing Orders) Act. 100+ employees. Submit to Certifying Officer.</div></div>
-      <div class="static-card"><div class="activity">Factory License Renewal (Elkhill / Terralife)</div><div class="due">Before 31st December of expiry year</div><div class="detail">Factories Act, 1948. Renewal application to District Factory Inspector before expiry.</div></div>
-      <div class="static-card"><div class="activity">LWF – Form D Annual Return</div><div class="due">15th January</div><div class="detail">Labour Welfare Fund annual return and contribution remittance under Karnataka LWF Act.</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- LICENSES TAB -->
-<div class="tab-panel" id="panel-licenses">
-  <div class="section-head">
-    <div class="section-title">License & Registration Tracker</div>
-    <div class="filter-row">
-      <button class="filter-btn active" onclick="filterLic('all',this)">All</button>
-      <button class="filter-btn" onclick="filterLic('SE',this)">S&amp;E</button>
-      <button class="filter-btn" onclick="filterLic('EPFO',this)">EPFO/PF</button>
-      <button class="filter-btn" onclick="filterLic('ESIC',this)">ESIC</button>
-      <button class="filter-btn" onclick="filterLic('PT',this)">Prof. Tax</button>
-      <button class="filter-btn" onclick="filterLic('Factory',this)">Factory</button>
-      <button class="filter-btn" onclick="filterLic('CLRA',this)">CLRA</button>
-      <button class="license-add-btn" onclick="openAddLicModal()">＋ Add License</button>
-    </div>
-  </div>
-  <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:#92400E; display:flex; gap:8px; align-items:flex-start;">
-    <span style="font-size:16px">⚠️</span>
-    <span><strong>Auto-highlight rules:</strong> License cards turn <strong style="color:#d97706">yellow</strong> when expiry is within 6 months or employee count reaches 80% of licensed limit. They turn <strong style="color:var(--overdue)">red</strong> when expired or limit exceeded.</span>
-  </div>
-  <div class="license-grid" id="licenseGrid"></div>
-  <div class="static-section">
-    <h3>Karnataka S&E Act – Licensing Obligations</h3>
-    <div class="static-cards">
-      <div class="static-card"><div class="activity">Shops & Establishment Registration</div><div class="due">Before commencing business</div><div class="detail">Mandatory under Karnataka S&E Act, 1961. Renewal every 5 years. Display certificate at premises.</div></div>
-      <div class="static-card"><div class="activity">Contract Labour (CLRA) – Registration</div><div class="due">Before engaging contract workers</div><div class="detail">Principal employer with 20+ contract workers must register. Contractor must obtain licence. Form I / Form IV.</div></div>
-      <div class="static-card"><div class="activity">Inter-State Migrant Workmen – Registration</div><div class="due">Before engaging ISMW</div><div class="detail">Both principal employer and contractor registration required if 5+ migrant workers. Form I / Form V under ISMWA, 1979.</div></div>
-      <div class="static-card"><div class="activity">Factory Licence (Elkhill / Terralife)</div><div class="due">Before commencing manufacturing</div><div class="detail">Under Factories Act, 1948. Renewed annually. Display at factory gate.</div></div>
-      <div class="static-card"><div class="activity">EPFO Registration</div><div class="due">Within 30 days of reaching 20 employees</div><div class="detail">Mandatory PF registration under EPF & MP Act, 1952.</div></div>
-      <div class="static-card"><div class="activity">ESIC Registration</div><div class="due">Within 15 days of reaching 10 employees</div><div class="detail">Mandatory ESI registration under ESIC Act, 1948. Maintain IP cards for all covered employees.</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- ACTIVITY LOG TAB -->
-<div class="tab-panel" id="panel-audit">
-  <div class="section-head">
-    <div class="section-title">Activity Log / Audit Trail</div>
-    <div class="filter-row admin-only" style="display:none"><button class="add-row-btn" onclick="exportCSV()">⬇️ Export All Data (CSV)</button></div>
-  </div>
-  <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Every create, edit, and delete across the dashboard is recorded here with who did it and when. Only the Administrator can delete entries from this log.</p>
-  <div class="audit-table-wrap">
-    <table class="audit-table">
-      <thead><tr id="auditTheadRow"><th>Date & Time</th><th>User</th><th>Action</th><th>Section</th><th>Record</th><th>Previous Value</th><th>New Value</th></tr></thead>
-      <tbody id="auditTbody"></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ADMIN TAB (Administrator only) -->
-<div class="tab-panel admin-only" id="panel-admin" style="display:none">
-  <div class="section-head"><div class="section-title">Administrator Panel</div></div>
-
-  <div class="admin-panel-wrap">
-    <h3>Data Import</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Run once, on a fresh database, to load the original Excel-based FY 2025-26 compliance dataset (including the license tracker). Safe to click — it refuses to run if records already exist.</p>
-    <button class="add-row-btn" onclick="appRunSeed()">⬇️ Import Initial Dataset (FY 2025-26)</button>
-    <p style="font-size:12px;color:var(--text-muted);margin:16px 0 12px">Load the FY 2026-27 recurring compliance calendar — same categories and pattern as FY 2025-26, dates shifted forward one year. Licenses aren't duplicated (they're shared across years). Safe to click — it refuses to run if FY 2026-27 records already exist.</p>
-    <button class="add-row-btn" onclick="appRunSeedNextYear()">⬇️ Import FY 2026-27 Dataset</button>
-  </div>
-
-  <div class="admin-panel-wrap">
-    <h3>Add User</h3>
-    <div class="new-user-form">
-      <div class="form-group"><label>Full Name</label><input class="form-input" id="u-name"></div>
-      <div class="form-group"><label>Email</label><input class="form-input" type="email" id="u-email"></div>
-      <div class="form-group"><label>Temporary Password</label><input class="form-input" type="password" id="u-password" placeholder="min 6 characters"></div>
-      <div class="form-group"><label>Role</label>
-        <select class="form-input" id="u-role"><option value="user">Standard User</option><option value="admin">Administrator</option></select>
+    <nav class="main-tabs">
+      <div class="main-tab active" data-tab="monthly" onclick="switchTab('monthly',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M8.5 14h2M13.5 14h2M8.5 17h2M13.5 17h2"/></svg></span>
+        <span class="main-tab-label">Monthly Returns</span>
+        <span class="tab-count" id="tc-monthly">0</span>
       </div>
-      <button class="add-row-btn" onclick="createUserFromForm()">＋ Create User</button>
+      <div class="main-tab" data-tab="quarterly" onclick="switchTab('quarterly',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
+        <span class="main-tab-label">Quarterly Returns</span>
+      </div>
+      <div class="main-tab" data-tab="halfyearly" onclick="switchTab('halfyearly',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg></span>
+        <span class="main-tab-label">Half-Yearly Returns</span>
+      </div>
+      <div class="main-tab" data-tab="yearly" onclick="switchTab('yearly',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3M16 3v3M6 21h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/><path d="m9 14 2 2 4-4"/></svg></span>
+        <span class="main-tab-label">Yearly Returns</span>
+      </div>
+      <div class="main-tab" data-tab="licenses" onclick="switchTab('licenses',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></span>
+        <span class="main-tab-label">Licenses</span>
+        <span class="tab-count" id="tc-lic">0</span>
+      </div>
+      <div class="main-tab" data-tab="audit" onclick="switchTab('audit',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4M12 8v4l3 2"/></svg></span>
+        <span class="main-tab-label">Activity Log</span>
+      </div>
+      <div class="main-tab admin-only" data-tab="admin" style="display:none" onclick="switchTab('admin',this)">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></span>
+        <span class="main-tab-label">Admin</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse sidebar">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l-2 2 2 2"/></svg></span>
+        <span>Collapse</span>
+      </button>
+    </div>
+  </aside>
+  <div class="sidebar-scrim" id="sidebarScrim" onclick="closeMobileSidebar()"></div>
+
+  <!-- MAIN COLUMN -->
+  <div class="app-main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <button class="sidebar-mobile-toggle" onclick="openMobileSidebar()" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+
+      <div class="global-search-bar">
+        <div class="global-search-wrap">
+          <span class="global-search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+          <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search compliance items, licenses, locations..." autocomplete="off">
+          <button class="global-search-clear" id="globalSearchClear" style="display:none" onclick="clearGlobalSearch()">×</button>
+          <div class="global-search-results" id="globalSearchResults"></div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="fy-switcher" id="fySwitcher">
+          <button class="fy-switch-btn" data-fy="2025-26" onclick="switchFiscalYear('2025-26')">FY 25-26</button>
+          <button class="fy-switch-btn" data-fy="2026-27" onclick="switchFiscalYear('2026-27')">FY 26-27</button>
+        </div>
+        <span class="today-badge" id="todayBadge"></span>
+        <div class="user-badge">
+          <div class="user-badge-avatar" id="userBadgeAvatar">?</div>
+          <div>
+            <div class="user-badge-name" id="userBadgeName">–</div>
+            <div class="user-badge-role" id="userBadgeRole">–</div>
+          </div>
+        </div>
+        <button class="topbar-btn" onclick="toggleSharePanel()">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 6.4M8.6 13.4l6.8 4.2"/></svg>
+          <span class="btn-label">Share</span>
+        </button>
+        <button class="topbar-btn" onclick="appLogout()">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+          <span class="btn-label">Logout</span>
+        </button>
+      </div>
     </div>
 
-    <div class="users-table-wrap">
-      <table class="users-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody id="usersTbody"></tbody>
-      </table>
+    <!-- REMINDER BANNER -->
+    <div class="reminder-banner" id="reminderBanner">
+      <div class="reminder-banner-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg></div>
+      <div class="reminder-banner-content">
+        <div class="reminder-banner-title">Upcoming Compliance Reminders</div>
+        <div class="reminder-banner-list" id="reminderBannerList"></div>
+      </div>
+      <button class="reminder-banner-close" onclick="document.getElementById('reminderBanner').classList.remove('show')">×</button>
     </div>
-  </div>
-</div>
 
-</div><!-- /page-wrap -->
+    <div class="page-wrap">
+
+    <!-- MONTHLY RETURNS TAB -->
+    <div class="tab-panel active" id="panel-monthly">
+      <div class="summary-row">
+        <div class="stat-card danger">
+          <div class="stat-card-top"><span class="label">Overdue</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span></div>
+          <div class="value" id="cnt-overdue">0</div><div class="sub">Past due date</div>
+        </div>
+        <div class="stat-card warn">
+          <div class="stat-card-top"><span class="label">Due This Month</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg></span></div>
+          <div class="value" id="cnt-month">0</div><div class="sub">Current month</div>
+        </div>
+        <div class="stat-card ok">
+          <div class="stat-card-top"><span class="label">Next 30 Days</span><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg></span></div>
+          <div class="value" id="cnt-upcoming">0</div><div class="sub">Upcoming</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><span class="label">PF Entries</span><span class="icon" style="background:var(--pf-bg);color:var(--pf-ink)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h3v-4Z"/></svg></span></div>
+          <div class="value" id="cnt-pf">0</div><div class="sub">Remittances + Returns</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><span class="label">ESI Entries</span><span class="icon" style="background:var(--esi-bg);color:var(--esi-ink)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg></span></div>
+          <div class="value" id="cnt-esi">0</div><div class="sub">Payments + Returns</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><span class="label">PT / Other</span><span class="icon" style="background:var(--pt-bg);color:var(--pt-ink)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg></span></div>
+          <div class="value" id="cnt-other">0</div><div class="sub">PT · LWF · Gratuity</div>
+        </div>
+      </div>
+
+      <div class="analytics-card">
+        <div class="analytics-card-head">
+          <div>
+            <div class="analytics-card-title">Status Breakdown</div>
+            <div class="analytics-card-sub">All monthly compliance items in the selected fiscal year</div>
+          </div>
+        </div>
+        <div class="status-bar-track" id="statusBreakdownBar"></div>
+        <div class="status-bar-legend" id="statusBreakdownLegend"></div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--status-critical)"></span>Overdue</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--status-warning)"></span>Due within 7 days</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--status-good)"></span>Upcoming</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--gray-400)"></span>Done</div>
+        <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+          <span class="cat-badge cat-pf">PF</span><span class="cat-badge cat-esi">ESI</span><span class="cat-badge cat-pt">Prof. Tax</span>
+          <span class="cat-badge cat-lwf">LWF</span><span class="cat-badge cat-grat">Gratuity</span><span class="cat-badge cat-bonus">Bonus</span>
+        </div>
+      </div>
+
+      <div class="loc-filter-wrap" id="locFilterWrap"><span class="loc-filter-label">Location:</span></div>
+
+      <div class="section-head">
+        <div class="section-title">Month-wise Compliance</div>
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="filterCat('all',this)">All</button>
+          <button class="filter-btn" onclick="filterCat('PF',this)">PF</button>
+          <button class="filter-btn" onclick="filterCat('ESI',this)">ESI</button>
+          <button class="filter-btn" onclick="filterCat('PT',this)">Prof. Tax</button>
+          <button class="filter-btn" onclick="filterCat('LWF',this)">LWF</button>
+          <button class="add-row-btn" onclick="openAddModal('monthly')"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Add Entry</button>
+        </div>
+      </div>
+
+      <div class="month-tabs" id="monthTabs"></div>
+
+      <div class="compliance-table-wrap">
+        <table class="compliance-table">
+          <thead><tr><th style="width:32px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:60px"></th></tr></thead>
+          <tbody id="complianceTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:90%"></div></td></tr>
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:75%"></div></td></tr>
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:85%"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="static-section">
+        <h3>Payment of Gratuity – Key Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">Gratuity Registration (Form A)</div><div class="due">Within 30 days of applicability</div><div class="detail">Required when establishment has 10+ employees.</div></div>
+          <div class="static-card"><div class="activity">Notice of Change (Form B)</div><div class="due">Within 30 days of any change</div><div class="detail">Report any change in name, address, or nature of business.</div></div>
+          <div class="static-card"><div class="activity">Employee Nomination (Form F)</div><div class="due">Within 30 days of 1 year service</div><div class="detail">Employee submits nomination for gratuity benefits.</div></div>
+          <div class="static-card"><div class="activity">Gratuity Payment (Form I / L)</div><div class="due">Within 30 days of eligibility</div><div class="detail">Employee applies via Form I; Employer responds via Form L.</div></div>
+          <div class="static-card"><div class="activity">Annual Return (Form R)</div><div class="due">31st January each year</div><div class="detail">Details of gratuity payments made during previous year.</div></div>
+          <div class="static-card"><div class="activity">Gratuity on Death (Form J / K)</div><div class="due">Within 30 days of claim</div><div class="detail">Nominee or legal heir files Form J / Form K.</div></div>
+        </div>
+      </div>
+      <div class="static-section">
+        <h3>Payment of Bonus – Key Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">Allocable Surplus (Form A)</div><div class="due">Before payment of bonus</div><div class="detail">Calculate and record allocable surplus before paying bonus.</div></div>
+          <div class="static-card"><div class="activity">Set-on / Set-off (Form B)</div><div class="due">Before payment of bonus</div><div class="detail">Determines surplus carried forward or deficit set off.</div></div>
+          <div class="static-card"><div class="activity">Bonus Register (Form C)</div><div class="due">Within 8 months of FY end</div><div class="detail">Details bonus payments to eligible employees.</div></div>
+          <div class="static-card"><div class="activity">Annual Return (Form D)</div><div class="due">30th December each year</div><div class="detail">Filed with labour department, summarising bonus payments.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUARTERLY RETURNS TAB -->
+    <div class="tab-panel" id="panel-quarterly">
+      <div class="section-head">
+        <div class="section-title">Quarterly Returns</div>
+        <button class="add-row-btn" onclick="openAddModal('quarterly')"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Add Entry</button>
+      </div>
+      <div class="period-section">
+        <div class="period-section-header"><h4>Employment Exchange Returns (Form ER-1) – All Locations (25+ Employees)</h4><span class="cat-badge cat-se" style="font-size:11px">S&E Act</span></div>
+        <div class="period-table-wrap"><table class="period-table">
+          <thead><tr><th>#</th><th>Location</th><th>Period</th><th>Due Date</th><th>Submitted On</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="quarterlyTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:80%"></div></td></tr>
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:65%"></div></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="period-section">
+        <div class="period-section-header"><h4>Contract Labour (CLRA) – Quarterly Returns</h4><span class="cat-badge cat-clra" style="font-size:11px">CLRA Act</span></div>
+        <div class="period-table-wrap"><table class="period-table">
+          <thead><tr><th>#</th><th>Location</th><th>Contractors</th><th>Period</th><th>Due Date</th><th>Status</th></tr></thead>
+          <tbody id="clraTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:70%"></div></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="static-section">
+        <h3>Karnataka S&E Act – Quarterly Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">Employment Exchange Return (ER-1)</div><div class="due">Quarterly – 30 days after quarter end</div><div class="detail">Applicable to establishments with 25+ employees under Employment Exchanges (Compulsory Notification of Vacancies) Act, 1959.</div></div>
+          <div class="static-card"><div class="activity">CLRA Contractor Register Verification</div><div class="due">Quarterly – internal review</div><div class="detail">Verify Register of Contractors (Form XII) and ensure all contractors are licensed (20+ workers threshold).</div></div>
+          <div class="static-card"><div class="activity">Minimum Wages – Quarterly Return</div><div class="due">Quarterly – as per state notification</div><div class="detail">Submit wage returns to the Labour Department as required by Karnataka state rules.</div></div>
+          <div class="static-card"><div class="activity">Inter-State Migrant Workmen Return</div><div class="due">Half-yearly / Quarterly</div><div class="detail">Return of interstate migrant workmen if 5+ such workers are employed. Form XIV to the Labour Commissioner.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HALF-YEARLY RETURNS TAB -->
+    <div class="tab-panel" id="panel-halfyearly">
+      <div class="section-head">
+        <div class="section-title">Half-Yearly Returns</div>
+        <button class="add-row-btn" onclick="openAddModal('halfyearly')"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Add Entry</button>
+      </div>
+      <div class="period-section">
+        <div class="period-section-header"><h4>ESIC Half-Yearly Returns</h4><span class="cat-badge cat-esi" style="font-size:11px">ESIC</span></div>
+        <div class="period-table-wrap"><table class="period-table">
+          <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects BLR</th><th>Earthitects WD</th><th>Terralife</th><th>Status</th></tr></thead>
+          <tbody id="halfYearlyEsicTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:70%"></div></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="period-section">
+        <div class="period-section-header"><h4>Professional Tax – Half-Yearly (Wayanad / Kerala)</h4><span class="cat-badge cat-pt" style="font-size:11px">Prof. Tax</span></div>
+        <div class="period-table-wrap"><table class="period-table">
+          <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>Location</th><th>Status</th></tr></thead>
+          <tbody id="halfYearlyPtTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:60%"></div></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="static-section">
+        <h3>Karnataka S&E Act – Half-Yearly Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">ESIC Half-Yearly Return</div><div class="due">Nov 11 (Apr–Sep) · May 11 (Oct–Mar)</div><div class="detail">Form 6 – Half-yearly return required under ESI Act, 1948 for all registered establishments.</div></div>
+          <div class="static-card"><div class="activity">Contract Labour – Half-Yearly Return</div><div class="due">Applicable when CLRA triggered</div><div class="detail">Contractor's return to principal employer and licencing officer under CLRA, 1970.</div></div>
+          <div class="static-card"><div class="activity">Inter-State Migrant Workmen – Half-Yearly</div><div class="due">Half-yearly – Form XIV</div><div class="detail">If 5+ inter-state migrant workers employed; submit return to Assistant Labour Commissioner.</div></div>
+          <div class="static-card"><div class="activity">Apprentice Act Return</div><div class="due">Half-yearly – April & October</div><div class="detail">Return of apprentices engaged under Apprentices Act, 1961. Filed with RDAT / State Apprenticeship Adviser.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- YEARLY RETURNS TAB -->
+    <div class="tab-panel" id="panel-yearly">
+      <div class="section-head">
+        <div class="section-title">Yearly / Annual Returns</div>
+        <button class="add-row-btn" onclick="openAddModal('yearly')"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Add Entry</button>
+      </div>
+      <div class="period-section">
+        <div class="period-section-header"><h4>Annual Returns Tracker – All Locations</h4></div>
+        <div class="period-table-wrap"><table class="period-table">
+          <thead><tr><th>#</th><th>Return / Filing</th><th>Act / Authority</th><th>Due Date</th><th>Mode</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects</th><th>Terralife</th><th>Others</th><th>Status</th></tr></thead>
+          <tbody id="yearlyTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:75%"></div></td></tr>
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:65%"></div></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="static-section">
+        <h3>Karnataka S&E Act – Additional Annual Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">S&E Annual Return (Form Q)</div><div class="due">31st January every year</div><div class="detail">Annual return under Karnataka Shops & Commercial Establishments Act, 1961 – submission to Inspector of Shops.</div></div>
+          <div class="static-card"><div class="activity">Minimum Wages Annual Return (Form III)</div><div class="due">31st January</div><div class="detail">Under Minimum Wages Act, 1948. Details of wage payments and working hours submitted online.</div></div>
+          <div class="static-card"><div class="activity">CLRA Annual Return</div><div class="due">31st January / as notified</div><div class="detail">Principal Employer's Annual Return to registering officer under CLRA, 1970. Form XXIV (as per rules).</div></div>
+          <div class="static-card"><div class="activity">ESIC – Form 1A Annual Return</div><div class="due">If any changes to address / bank / directors</div><div class="detail">Annual changes to employer registration details submitted to ESIC office.</div></div>
+          <div class="static-card"><div class="activity">Equal Remuneration – Form D</div><div class="due">31st January</div><div class="detail">Annual return under Equal Remuneration Act, 1976 showing male/female employee details and wages paid.</div></div>
+          <div class="static-card"><div class="activity">Maternity Benefit – Annual Return</div><div class="due">31st December</div><div class="detail">Return of maternity benefits paid to women employees in preceding year.</div></div>
+          <div class="static-card"><div class="activity">She-Box / POSH Return</div><div class="due">31st January</div><div class="detail">Annual report of ICC (Internal Complaints Committee) under POSH Act, 2013. Submit online via She-Box portal.</div></div>
+          <div class="static-card"><div class="activity">Standing Orders – Form 5A</div><div class="due">Once certified; review on change</div><div class="detail">Under Industrial Employment (Standing Orders) Act. 100+ employees. Submit to Certifying Officer.</div></div>
+          <div class="static-card"><div class="activity">Factory License Renewal (Elkhill / Terralife)</div><div class="due">Before 31st December of expiry year</div><div class="detail">Factories Act, 1948. Renewal application to District Factory Inspector before expiry.</div></div>
+          <div class="static-card"><div class="activity">LWF – Form D Annual Return</div><div class="due">15th January</div><div class="detail">Labour Welfare Fund annual return and contribution remittance under Karnataka LWF Act.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LICENSES TAB -->
+    <div class="tab-panel" id="panel-licenses">
+      <div class="section-head">
+        <div class="section-title">License & Registration Tracker</div>
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="filterLic('all',this)">All</button>
+          <button class="filter-btn" onclick="filterLic('SE',this)">S&amp;E</button>
+          <button class="filter-btn" onclick="filterLic('EPFO',this)">EPFO/PF</button>
+          <button class="filter-btn" onclick="filterLic('ESIC',this)">ESIC</button>
+          <button class="filter-btn" onclick="filterLic('PT',this)">Prof. Tax</button>
+          <button class="filter-btn" onclick="filterLic('Factory',this)">Factory</button>
+          <button class="filter-btn" onclick="filterLic('CLRA',this)">CLRA</button>
+          <button class="license-add-btn" onclick="openAddLicModal()"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>Add License</button>
+        </div>
+      </div>
+      <div style="background:var(--status-warning-bg); border:1px solid #F5D38A; border-radius:var(--r-md); padding:var(--sp-3) var(--sp-4); margin-bottom:var(--sp-5); font-size:12px; color:var(--status-warning); display:flex; gap:var(--sp-2); align-items:flex-start;">
+        <span style="flex-shrink:0;margin-top:1px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+        <span><strong>Auto-highlight rules:</strong> License cards turn <strong style="color:#B45309">amber</strong> when expiry is within 6 months or employee count reaches 80% of licensed limit. They turn <strong style="color:var(--status-critical)">red</strong> when expired or limit exceeded.</span>
+      </div>
+      <div class="license-grid" id="licenseGrid">
+        <div class="license-card"><div class="skel-line skel-card" style="width:100%"></div></div>
+        <div class="license-card"><div class="skel-line skel-card" style="width:100%"></div></div>
+        <div class="license-card"><div class="skel-line skel-card" style="width:100%"></div></div>
+      </div>
+      <div class="static-section">
+        <h3>Karnataka S&E Act – Licensing Obligations</h3>
+        <div class="static-cards">
+          <div class="static-card"><div class="activity">Shops & Establishment Registration</div><div class="due">Before commencing business</div><div class="detail">Mandatory under Karnataka S&E Act, 1961. Renewal every 5 years. Display certificate at premises.</div></div>
+          <div class="static-card"><div class="activity">Contract Labour (CLRA) – Registration</div><div class="due">Before engaging contract workers</div><div class="detail">Principal employer with 20+ contract workers must register. Contractor must obtain licence. Form I / Form IV.</div></div>
+          <div class="static-card"><div class="activity">Inter-State Migrant Workmen – Registration</div><div class="due">Before engaging ISMW</div><div class="detail">Both principal employer and contractor registration required if 5+ migrant workers. Form I / Form V under ISMWA, 1979.</div></div>
+          <div class="static-card"><div class="activity">Factory Licence (Elkhill / Terralife)</div><div class="due">Before commencing manufacturing</div><div class="detail">Under Factories Act, 1948. Renewed annually. Display at factory gate.</div></div>
+          <div class="static-card"><div class="activity">EPFO Registration</div><div class="due">Within 30 days of reaching 20 employees</div><div class="detail">Mandatory PF registration under EPF & MP Act, 1952.</div></div>
+          <div class="static-card"><div class="activity">ESIC Registration</div><div class="due">Within 15 days of reaching 10 employees</div><div class="detail">Mandatory ESI registration under ESIC Act, 1948. Maintain IP cards for all covered employees.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY LOG TAB -->
+    <div class="tab-panel" id="panel-audit">
+      <div class="section-head">
+        <div class="section-title">Activity Log / Audit Trail</div>
+        <div class="filter-row admin-only" style="display:none"><button class="add-row-btn" onclick="exportCSV()"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>Export All Data (CSV)</button></div>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:var(--sp-4)">Every create, edit, and delete across the dashboard is recorded here with who did it and when. Only the Administrator can delete entries from this log.</p>
+      <div class="audit-table-wrap">
+        <table class="audit-table">
+          <thead><tr id="auditTheadRow"><th>Date & Time</th><th>User</th><th>Action</th><th>Section</th><th>Record</th><th>Previous Value</th><th>New Value</th></tr></thead>
+          <tbody id="auditTbody">
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:80%"></div></td></tr>
+            <tr class="skel-row"><td colspan="20"><div class="skel-line" style="width:70%"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB (Administrator only) -->
+    <div class="tab-panel admin-only" id="panel-admin" style="display:none">
+      <div class="section-head"><div class="section-title">Administrator Panel</div></div>
+
+      <div class="admin-panel-wrap">
+        <h3>Data Import</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Run once, on a fresh database, to load the original Excel-based FY 2025-26 compliance dataset (including the license tracker). Safe to click — it refuses to run if records already exist.</p>
+        <button class="add-row-btn" onclick="appRunSeed()"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>Import Initial Dataset (FY 2025-26)</button>
+        <p style="font-size:12px;color:var(--text-muted);margin:16px 0 12px">Load the FY 2026-27 recurring compliance calendar — same categories and pattern as FY 2025-26, dates shifted forward one year. Licenses aren't duplicated (they're shared across years). Safe to click — it refuses to run if FY 2026-27 records already exist.</p>
+        <button class="add-row-btn" onclick="appRunSeedNextYear()"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>Import FY 2026-27 Dataset</button>
+      </div>
+
+      <div class="admin-panel-wrap">
+        <h3>Add User</h3>
+        <div class="new-user-form">
+          <div class="form-group"><label>Full Name</label><input class="form-input" id="u-name"></div>
+          <div class="form-group"><label>Email</label><input class="form-input" type="email" id="u-email"></div>
+          <div class="form-group"><label>Temporary Password</label><input class="form-input" type="password" id="u-password" placeholder="min 6 characters"></div>
+          <div class="form-group"><label>Role</label>
+            <select class="form-input" id="u-role"><option value="user">Standard User</option><option value="admin">Administrator</option></select>
+          </div>
+          <button class="add-row-btn" onclick="createUserFromForm()"><span class="icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>Create User</button>
+        </div>
+
+        <div class="users-table-wrap">
+          <table class="users-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="usersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /page-wrap -->
+  </div><!-- /app-main -->
+</div><!-- /app-shell -->
+</div><!-- /appShell -->
 
 <!-- ADD ENTRY MODAL -->
 <div class="modal-overlay" id="addModal">
@@ -435,6 +537,24 @@
   <div class="share-info"><strong>This is a live, shared dashboard.</strong><br>Everyone signs in with their own account at the same URL — there is nothing to download or email. Ask the Administrator to create an account for a new teammate from the Admin panel.</div>
   <div class="share-btn-row"><button class="share-action-btn secondary" onclick="toggleSharePanel()">Close</button></div>
 </div>
+
+<!-- CONFIRM DIALOG (replaces native confirm()) -->
+<div class="modal-overlay confirm-dialog" id="confirmDialog">
+  <div class="modal">
+    <div class="modal-body" style="padding-top:28px">
+      <div class="confirm-icon" id="confirmIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+      <h3 id="confirmTitle" style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Are you sure?</h3>
+      <p class="confirm-msg" id="confirmMsg"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="confirmCancelBtn">Cancel</button>
+      <button class="btn-danger" id="confirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div class="toast-stack" id="toastStack"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>
