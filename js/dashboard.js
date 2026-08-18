@@ -1,13 +1,19 @@
 // Dashboard rendering — adapted from the original static tracker, but now
 // driven by realtime Firestore data instead of in-memory arrays. Every
-// mutation (add / delete / mark-done) goes through db.js, which persists
-// it, syncs it to every open browser instantly, and writes an audit entry.
-import { subscribeRecords, addRecord, updateRecord, deleteRecord, toggleRecordDone, toDate } from "./db.js";
+// mutation (add / edit / delete / mark-done / reorder) goes through db.js,
+// which persists it, syncs it to every open browser instantly, and writes
+// an audit entry.
+import { subscribeRecords, addRecord, updateRecord, deleteRecord, toggleRecordDone, reorderRecords, toDate } from "./db.js";
 import { subscribeAuditLog, deleteAuditEntry } from "./audit.js";
 import { subscribeUsers, createUser, setUserRole, setUserActive, updateUserProfile, deleteUserProfile } from "./admin.js";
 import { currentUser, isAdmin } from "./auth.js";
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// Real Date.getMonth() indices, but in fiscal display order (Apr..Mar)
+// instead of calendar order — only affects how the month tabs are drawn.
+// Filtering elsewhere still compares against the real month index, so
+// underlying dates and business logic are untouched.
+const FISCAL_MONTH_ORDER = [3,4,5,6,7,8,9,10,11,0,1,2];
 
 // ── Local realtime caches (kept fresh by Firestore onSnapshot) ──────
 let monthly = [], quarterly = [], clra = [], hyEsic = [], hyPt = [], yearly = [], licenses = [], auditRows = [], users = [];
@@ -17,6 +23,10 @@ let activeCatFilter = 'all';
 let activeLocFilter = 'all';
 let activeLicFilter = 'all';
 let currentAddSection = 'monthly';
+let currentEditId = null;
+let currentEditType = null;
+let currentSubtype = null;
+let currentLicEditId = null;
 let reminderDays = 7;
 
 // Indian fiscal year: 1 Apr – 31 Mar. "2026-27" means Apr 2026–Mar 2027.
@@ -58,6 +68,131 @@ function catBadge(cat) {
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function delBtnHtml(id, type, summary) {
   return `<button class="del-btn" onclick="appDeleteRecord('${id}','${type}','${esc(summary).replace(/'/g,"\\'")}')" title="Delete">🗑</button>`;
+}
+function editBtnHtml(id, type) {
+  return `<button class="edit-btn" onclick="appEditRecord('${id}','${type}')" title="Edit">✏️</button>`;
+}
+function stripId(r) { const { id, ...rest } = r; return rest; }
+
+// ═══════════════════════════════════════════
+// SORT MODE (per-table "Due Date" vs "Custom Order" view preference —
+// a local UI preference, independent of the drag ORDER itself, which is
+// real shared data saved via reorderRecords/fields.sortOrder).
+// ═══════════════════════════════════════════
+const SORT_MODE_KEY = 'hrDashSortModes';
+function loadSortModes() {
+  try { return JSON.parse(localStorage.getItem(SORT_MODE_KEY) || '{}'); } catch { return {}; }
+}
+let sortModes = loadSortModes();
+function getSortMode(section) { return sortModes[section] || 'date'; }
+export function setSortMode(section, mode) {
+  sortModes[section] = mode;
+  try { localStorage.setItem(SORT_MODE_KEY, JSON.stringify(sortModes)); } catch {}
+  RENDER_BY_SECTION[section] && RENDER_BY_SECTION[section]();
+}
+function applySortMode(rows, section, dateField) {
+  const arr = [...rows];
+  if (getSortMode(section) === 'custom') return arr.sort((a,b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  return arr.sort((a,b) => (a[dateField]?.getTime() ?? 0) - (b[dateField]?.getTime() ?? 0));
+}
+function initSortSelects() {
+  // esic/yearly are deferred (still wide-format, not reorderable yet).
+  ['monthly','quarterly','clra','pt','licenses'].forEach(section => {
+    const sel = document.getElementById('sort-' + section);
+    if (sel) sel.value = getSortMode(section);
+  });
+}
+
+// ═══════════════════════════════════════════
+// ROW / CARD DRAG-AND-DROP REORDERING
+// ═══════════════════════════════════════════
+function enableRowDragReorder(tbodyId, type) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody || tbody.dataset.dragWired) return;
+  tbody.dataset.dragWired = '1';
+  let dragId = null;
+  tbody.addEventListener('dragstart', (e) => {
+    const tr = e.target.closest('tr[data-record-id][draggable="true"]');
+    if (!tr) return;
+    dragId = tr.dataset.recordId;
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  tbody.addEventListener('dragover', (e) => {
+    const tr = e.target.closest('tr[data-record-id][draggable="true"]');
+    if (!tr || !dragId) return;
+    e.preventDefault();
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over-row'));
+    tr.classList.add('drag-over-row');
+  });
+  tbody.addEventListener('dragleave', (e) => {
+    const tr = e.target.closest('tr[data-record-id]');
+    if (tr) tr.classList.remove('drag-over-row');
+  });
+  tbody.addEventListener('drop', async (e) => {
+    const tr = e.target.closest('tr[data-record-id][draggable="true"]');
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over-row'));
+    if (!tr || !dragId) return;
+    e.preventDefault();
+    const targetId = tr.dataset.recordId;
+    if (targetId === dragId) return;
+    const rows = Array.from(tbody.querySelectorAll('tr[data-record-id]'));
+    const ids = rows.map(r => r.dataset.recordId);
+    const fromIdx = ids.indexOf(dragId), toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    ids.splice(toIdx, 0, ids.splice(fromIdx, 1)[0]);
+    const updates = ids.map((id, i) => ({ id, sortOrder: i * 10 }));
+    try { await reorderRecords(type, updates, `Reordered ${type}`); }
+    catch (err) { alert('Could not save new order: ' + err.message); }
+    dragId = null;
+  });
+  tbody.addEventListener('dragend', () => {
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over-row'));
+    dragId = null;
+  });
+}
+function enableLicenseDragReorder() {
+  const grid = document.getElementById('licenseGrid');
+  if (!grid || grid.dataset.dragWired) return;
+  grid.dataset.dragWired = '1';
+  let dragId = null;
+  grid.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('[data-record-id][draggable="true"]');
+    if (!card) return;
+    dragId = card.dataset.recordId;
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  grid.addEventListener('dragover', (e) => {
+    const card = e.target.closest('[data-record-id][draggable="true"]');
+    if (!card || !dragId) return;
+    e.preventDefault();
+    grid.querySelectorAll('.license-card').forEach(c => c.classList.remove('drag-over-card'));
+    card.classList.add('drag-over-card');
+  });
+  grid.addEventListener('dragleave', (e) => {
+    const card = e.target.closest('[data-record-id]');
+    if (card) card.classList.remove('drag-over-card');
+  });
+  grid.addEventListener('drop', async (e) => {
+    const card = e.target.closest('[data-record-id][draggable="true"]');
+    grid.querySelectorAll('.license-card').forEach(c => c.classList.remove('drag-over-card'));
+    if (!card || !dragId) return;
+    e.preventDefault();
+    const targetId = card.dataset.recordId;
+    if (targetId === dragId) return;
+    const cards = Array.from(grid.querySelectorAll('[data-record-id]'));
+    const ids = cards.map(c => c.dataset.recordId);
+    const fromIdx = ids.indexOf(dragId), toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    ids.splice(toIdx, 0, ids.splice(fromIdx, 1)[0]);
+    const updates = ids.map((id, i) => ({ id, sortOrder: i * 10 }));
+    try { await reorderRecords('license', updates, 'Reordered licenses'); }
+    catch (err) { alert('Could not save new order: ' + err.message); }
+    dragId = null;
+  });
+  grid.addEventListener('dragend', () => {
+    grid.querySelectorAll('.license-card').forEach(c => c.classList.remove('drag-over-card'));
+    dragId = null;
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -102,6 +237,16 @@ export function initDashboard() {
     users = rows;
     renderUsersPanel();
   }));
+
+  initSortSelects();
+  enableRowDragReorder('complianceTbody', 'monthly');
+  enableRowDragReorder('quarterlyTbody', 'quarterly');
+  enableRowDragReorder('clraTbody', 'clra');
+  enableRowDragReorder('halfYearlyPtTbody', 'halfyearly_pt');
+  // halfYearlyEsicTbody / yearlyTbody: not wired — still wide-format,
+  // deferred alongside the long-format migration.
+  enableLicenseDragReorder();
+
   return unsubs;
 }
 
@@ -169,31 +314,27 @@ function renderMonthlyTable(mIdx) {
     .filter(d => d.fiscalYear === activeFiscalYear)
     .filter(d => d.date && d.date.getMonth() === mIdx)
     .filter(d => activeCatFilter === 'all' || d.cat === activeCatFilter)
-    .filter(d => activeLocFilter === 'all' || d.loc === activeLocFilter)
-    .sort((a,b) => a.date - b.date);
+    .filter(d => activeLocFilter === 'all' || d.loc === activeLocFilter);
+  filtered = applySortMode(filtered, 'monthly', 'date');
+  const draggable = getSortMode('monthly') === 'custom';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No compliance items for this month / filter${monthly.some(d=>d.fiscalYear===activeFiscalYear) ? '' : ' — nothing imported for ' + fyLabel(activeFiscalYear) + ' yet'}.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">No compliance items for this month / filter${monthly.some(d=>d.fiscalYear===activeFiscalYear) ? '' : ' — nothing imported for ' + fyLabel(activeFiscalYear) + ' yet'}.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(item => {
     const status = getStatus(item.date);
-    return `<tr data-record-id="${item.id}" style="${item.done?'opacity:0.5':''}">
-      <td><input type="checkbox" class="done-check" ${item.done?'checked':''} onchange="appToggleDone('${item.id}','monthly',this,${JSON.stringify(item.desc)})" title="Mark done"></td>
+    return `<tr data-record-id="${item.id}" draggable="${draggable}" style="${item.done?'opacity:0.5':''}">
+      <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
+      <td><input type="checkbox" class="done-check" ${item.done?'checked':''} onchange="appConfirmCheck('${item.id}','monthly',this,${JSON.stringify(item.desc)})" title="Mark done"></td>
       <td class="date-cell">${fmt(item.date)}</td>
       <td class="desc-cell">${esc(item.desc)}${item.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${esc(item.notes)}</span>` : ''}</td>
       <td>${catBadge(item.cat)}</td>
       <td><span class="location-tag">${esc(item.loc)||'–'}</span></td>
       <td>${statusPill(status, item.done)}</td>
-      <td>${delBtnHtml(item.id, 'monthly', item.desc)}</td>
+      <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(item.id,'monthly')}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
     </tr>`;
   }).join('');
-}
-
-export async function toggleDone(id, type, cb, summary) {
-  try {
-    await toggleRecordDone(id, type, {}, cb.checked, summary);
-  } catch (e) { alert('Could not update: ' + e.message); cb.checked = !cb.checked; }
 }
 
 export async function deleteEntry(id, type, summary) {
@@ -208,14 +349,15 @@ function buildMonthTabs() {
   const overdueMonths = new Set();
   monthly.forEach(item => { if (item.fiscalYear === activeFiscalYear && !item.done && item.date && getStatus(item.date) === 'overdue') overdueMonths.add(item.date.getMonth()); });
   tabs.innerHTML = '';
-  months.forEach((m, i) => {
+  FISCAL_MONTH_ORDER.forEach(realIdx => {
     const btn = document.createElement('div');
-    btn.className = 'month-tab' + (i === activeMonthIdx ? ' active' : '');
-    btn.innerHTML = m + (overdueMonths.has(i) ? '<span class="dot"></span>' : '');
+    btn.className = 'month-tab' + (realIdx === activeMonthIdx ? ' active' : '');
+    btn.dataset.monthIdx = realIdx;
+    btn.innerHTML = months[realIdx] + (overdueMonths.has(realIdx) ? '<span class="dot"></span>' : '');
     btn.onclick = () => {
-      activeMonthIdx = i;
-      document.querySelectorAll('.month-tab').forEach((t,j) => t.classList.toggle('active', j===i));
-      renderMonthlyTable(i);
+      activeMonthIdx = realIdx;
+      document.querySelectorAll('.month-tab').forEach(t => t.classList.toggle('active', Number(t.dataset.monthIdx) === realIdx));
+      renderMonthlyTable(realIdx);
     };
     tabs.appendChild(btn);
   });
@@ -246,48 +388,52 @@ function updateSummary() {
 function renderQuarterlyTable() {
   const tbody = document.getElementById('quarterlyTbody');
   if (tbody) {
-    tbody.innerHTML = quarterly.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
+    const draggable = getSortMode('quarterly') === 'custom';
+    const rows = applySortMode(quarterly.filter(r => r.fiscalYear === activeFiscalYear), 'quarterly', 'due');
+    tbody.innerHTML = rows.map((row, i) => {
       const status = getStatus(row.due);
-      const period = row.from && row.to ? `${row.from} – ${row.to}` : (row.period || '–');
-      return `<tr data-record-id="${row.id}">
+      const period = row.period || (row.from && row.to ? `${row.from} – ${row.to}` : '–');
+      const done = !!row.submitted || !!row.done;
+      return `<tr data-record-id="${row.id}" draggable="${draggable}">
+        <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td>
         <td class="loc">${esc(row.loc)||'–'}</td>
         <td>${esc(period)}</td>
         <td class="date-cell">${fmt(row.due)}</td>
         <td>${row.submitted ? `<span style="color:var(--upcoming);font-weight:600">${esc(row.submitted)}</span>` : '<em style="color:#9ca3af">Pending</em>'}</td>
-        <td>${row.submitted ? statusPill('done',true) : statusPill(status,false)}</td>
-        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${row.submitted?'checked':''} onchange="appQuarterlyDone('${row.id}',this)">${delBtnHtml(row.id,'quarterly', period)}</td>
+        <td>${done ? statusPill('done',true) : statusPill(status,false)}</td>
+        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','quarterly',this,${JSON.stringify(period)})">${editBtnHtml(row.id,'quarterly')}${delBtnHtml(row.id,'quarterly', period)}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="7"><div class="empty-state">No entries yet.</div></td></tr>`;
+    }).join('') || `<tr><td colspan="8"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
   const clraTbody = document.getElementById('clraTbody');
   if (clraTbody) {
-    clraTbody.innerHTML = clra.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
+    const draggable = getSortMode('clra') === 'custom';
+    const rows = applySortMode(clra.filter(r => r.fiscalYear === activeFiscalYear), 'clra', 'due');
+    clraTbody.innerHTML = rows.map((row, i) => {
       const status = getStatus(row.due);
-      return `<tr data-record-id="${row.id}">
+      return `<tr data-record-id="${row.id}" draggable="${draggable}">
+        <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td>
         <td class="loc">${esc(row.loc)||'–'}</td>
         <td style="font-size:12px">${esc(row.contractors)||'–'}</td>
         <td>${esc(row.period)||'–'}</td>
         <td class="date-cell">${fmt(row.due)}</td>
-        <td style="display:flex;gap:4px;align-items:center">${statusPill(status, row.done)}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
+        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${row.done?'checked':''} onchange="appConfirmCheck('${row.id}','clra',this,${JSON.stringify(row.period||row.loc)})">${statusPill(status, row.done)}${editBtnHtml(row.id,'clra')}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="6"><div class="empty-state">No entries yet.</div></td></tr>`;
+    }).join('') || `<tr><td colspan="7"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
 }
 
-export async function quarterlyDone(id, cb) {
-  const row = quarterly.find(r => r.id === id);
-  if (!row) return;
-  try { await updateRecord(id, 'quarterly', { submitted: row.submitted }, { ...stripId(row), submitted: cb.checked ? 'Marked done' : '' }, row.loc); }
-  catch (e) { alert('Could not update: ' + e.message); cb.checked = !cb.checked; }
-}
-function stripId(r) { const { id, ...rest } = r; return rest; }
-
 // ═══════════════════════════════════════════
-// HALF-YEARLY
+// HALF-YEARLY — both ESIC and PT use the same one-row-per-location shape
+// { period, due, loc, status }.
 // ═══════════════════════════════════════════
 function renderHalfYearlyTables() {
+  // ESIC stays in the original wide format (one row per period, a column
+  // per location) — matching what's still live in Firestore. Not yet
+  // editable/reorderable; that upgrade is deferred alongside the
+  // long-format data migration (see scripts/migrate-longformat.js).
   const esicTbody = document.getElementById('halfYearlyEsicTbody');
   if (esicTbody) {
     const doneClass = v => v === 'Done' ? `<span style="color:var(--upcoming);font-weight:600">✓</span>` : `<span style="color:#d1d5db">–</span>`;
@@ -301,20 +447,30 @@ function renderHalfYearlyTables() {
       </tr>`;
     }).join('') || `<tr><td colspan="11"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
+  // PT was already long-format before this round of changes, so it keeps
+  // every new feature (edit, delay-checkbox, drag-reorder) same as
+  // Monthly/Quarterly/CLRA.
   const ptTbody = document.getElementById('halfYearlyPtTbody');
   if (ptTbody) {
-    ptTbody.innerHTML = hyPt.filter(r => r.fiscalYear === activeFiscalYear).map((row,i) => {
+    const draggable = getSortMode('pt') === 'custom';
+    const rows = applySortMode(hyPt.filter(r => r.fiscalYear === activeFiscalYear), 'pt', 'due');
+    ptTbody.innerHTML = rows.map((row,i) => {
       const status = getStatus(row.due);
-      return `<tr data-record-id="${row.id}">
+      const done = row.status === 'Done' || !!row.done;
+      return `<tr data-record-id="${row.id}" draggable="${draggable}">
+        <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
-        <td style="display:flex;gap:4px;align-items:center">${statusPill(status, row.status === 'Done')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_pt',this,${JSON.stringify((row.period||'')+' – '+(row.loc||''))})">${statusPill(status, done)}${editBtnHtml(row.id,'halfyearly_pt')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="5"><div class="empty-state">No entries yet.</div></td></tr>`;
+    }).join('') || `<tr><td colspan="6"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
 }
 
 // ═══════════════════════════════════════════
-// YEARLY
+// YEARLY — stays in the original wide format (one row per filing type, a
+// column per location) — matching what's still live in Firestore. Not yet
+// editable/reorderable; deferred alongside the long-format data migration
+// (see scripts/migrate-longformat.js).
 // ═══════════════════════════════════════════
 function renderYearlyTable() {
   const tbody = document.getElementById('yearlyTbody');
@@ -352,12 +508,14 @@ function renderLicenses() {
   const typeLbl = { SE:'Shops & Establishment', EPFO:'EPFO / PF', ESIC:'ESIC', PT:'Prof. Tax (EC/RC)', Factory:'Factory License', CLRA:'CLRA', ISMW:'ISMW' };
 
   const filtered = licenses.filter(l => activeLicFilter === 'all' || l.type === activeLicFilter);
+  const sorted = applySortMode(filtered, 'licenses', 'expiry');
+  const draggable = getSortMode('licenses') === 'custom';
   const grid = document.getElementById('licenseGrid');
   if (!grid) return;
   grid.innerHTML = '';
   let count = 0;
 
-  filtered.forEach((lic) => {
+  sorted.forEach((lic) => {
     let daysToExpiry = null, expired = false, expiringSoon = false;
     if (lic.expiry) {
       const expD = new Date(lic.expiry); expD.setHours(0,0,0,0);
@@ -394,12 +552,15 @@ function renderLicenses() {
     const folderHtml = `<div class="license-folder">📁 Document in folder: <span class="${lic.folder==='Yes'?'folder-yes':lic.folder==='No'?'folder-no':''}">${esc(lic.folder)}</span></div>`;
 
     grid.insertAdjacentHTML('beforeend', `
-      <div class="${cardClass}" data-record-id="${lic.id}">
+      <div class="${cardClass}" data-record-id="${lic.id}" draggable="${draggable}">
         <div class="license-card-header">
-          <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${draggable ? '<span class="license-drag-handle">⠿</span>' : ''}
+            <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div></div>
+          </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
             <span class="license-type-badge ${typeMap[lic.type]||'lt-se'}">${typeLbl[lic.type]||lic.type}</span>
-            ${delBtnHtml(lic.id,'license', lic.company)}
+            <div style="display:flex;gap:2px">${editBtnHtml(lic.id,'license')}${delBtnHtml(lic.id,'license', lic.company)}</div>
           </div>
         </div>
         <div class="license-meta">
@@ -420,17 +581,152 @@ function renderLicenses() {
 }
 
 // ═══════════════════════════════════════════
-// ADD MODALS
+// ADD / EDIT MODAL — one modal, driven by currentAddSection / currentSubtype
+// / currentEditId, reused for both creating and editing every record type.
 // ═══════════════════════════════════════════
+const TYPE_TO_SECTION = { monthly:'monthly', quarterly:'quarterly', clra:'quarterly', halfyearly_esic:'halfyearly', halfyearly_pt:'halfyearly', yearly:'yearly' };
+const TYPE_TO_SUBTYPE = { quarterly:'er1', clra:'clra', halfyearly_esic:'esic', halfyearly_pt:'pt' };
+// esic/yearly deliberately omitted — deferred alongside the long-format
+// migration, no sort-mode control exists for them right now.
+const RENDER_BY_SECTION = {
+  monthly: () => renderMonthlyTable(activeMonthIdx),
+  quarterly: renderQuarterlyTable,
+  clra: renderQuarterlyTable,
+  pt: renderHalfYearlyTables,
+  licenses: renderLicenses,
+};
+
+function cacheFor(type) {
+  return { monthly, quarterly, clra, halfyearly_esic: hyEsic, halfyearly_pt: hyPt, yearly, license: licenses }[type];
+}
+function findRow(type, id) {
+  const arr = cacheFor(type);
+  return arr && arr.find(r => r.id === id);
+}
+function nextSortOrder(arr) {
+  const vals = arr.filter(r => r.fiscalYear === activeFiscalYear).map(r => r.sortOrder || 0);
+  return (vals.length ? Math.max(...vals) : 0) + 10;
+}
+
+// Half-Yearly only ever adds/edits Professional Tax entries here — ESIC
+// stays wide-format and isn't addable/editable through this modal yet
+// (see the "deferred alongside long-format migration" notes above).
+function subtypeOptionsHtml(section) {
+  if (section === 'quarterly') return `<option value="er1">Employment Exchange (ER-1)</option><option value="clra">CLRA Return</option>`;
+  return '';
+}
+
+function configureEntryFormFields(section, subtype, isEdit) {
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('f-cat-row', section === 'monthly');
+  show('f-reminder-row', section === 'monthly');
+  show('f-subtype-row', section === 'quarterly');
+  show('f-actmode-row', section === 'yearly');
+  show('f-loc-row', section !== 'yearly'); // yearly stays wide-format — no single per-row location yet
+  show('f-submitted-row', section === 'quarterly' && subtype === 'er1');
+  show('f-clra-row', section === 'quarterly' && subtype === 'clra');
+  const subtypeSel = document.getElementById('f-subtype');
+  if (subtypeSel) {
+    subtypeSel.innerHTML = subtypeOptionsHtml(section);
+    subtypeSel.value = subtype || '';
+    subtypeSel.disabled = isEdit;
+  }
+}
+document.getElementById('f-subtype')?.addEventListener('change', (e) => {
+  currentSubtype = e.target.value;
+  configureEntryFormFields(currentAddSection, currentSubtype, !!currentEditId);
+});
+
+function clearEntryForm() {
+  ['f-date','f-desc','f-notes','f-act','f-mode','f-submitted','f-contractors','f-workers'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const cat = document.getElementById('f-cat'); if (cat) cat.selectedIndex = 0;
+  const loc = document.getElementById('f-loc'); if (loc) loc.selectedIndex = 0;
+  const rem = document.getElementById('f-reminder'); if (rem) rem.value = 7;
+}
+
+function toInputDateStr(d) {
+  if (!d || isNaN(d)) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function fillEntryForm(type, row) {
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+  if (type === 'monthly') {
+    setVal('f-date', toInputDateStr(row.date)); setVal('f-desc', row.desc); setVal('f-cat', row.cat);
+    setVal('f-loc', row.loc); setVal('f-reminder', row.reminderDays || 7); setVal('f-notes', row.notes);
+  } else if (type === 'quarterly') {
+    setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period || (row.from && row.to ? `${row.from} – ${row.to}` : ''));
+    setVal('f-loc', row.loc); setVal('f-submitted', row.submitted); setVal('f-notes', row.note);
+  } else if (type === 'clra') {
+    setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period); setVal('f-loc', row.loc);
+    setVal('f-contractors', row.contractors); setVal('f-workers', row.workers);
+  } else if (type === 'halfyearly_pt') {
+    setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period); setVal('f-loc', row.loc);
+  }
+  // halfyearly_esic / yearly: not reachable — see openEditModal's guard.
+}
+
 export function openAddModal(section) {
   currentAddSection = section;
+  currentEditId = null; currentEditType = null;
+  currentSubtype = section === 'quarterly' ? 'er1' : null;
   const title = document.getElementById('addModalTitle');
   if (title) title.textContent = `Add Entry – ${section.charAt(0).toUpperCase()+section.slice(1)}`;
-  const catRow = document.getElementById('f-cat-row');
-  if (catRow) catRow.style.display = section === 'monthly' ? '' : 'none';
+  const saveBtn = document.getElementById('addModalSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Add Entry';
+  clearEntryForm();
+  configureEntryFormFields(section, currentSubtype, false);
   document.getElementById('addModal').classList.add('show');
 }
-export function openAddLicModal() { document.getElementById('addLicModal').classList.add('show'); }
+
+export function openEditModal(id, type) {
+  // halfyearly_esic / yearly stay wide-format for now — no edit button is
+  // ever rendered for them, but guard here too in case this is ever
+  // reached another way, since this modal assumes long-format fields.
+  if (type === 'halfyearly_esic' || type === 'yearly') return;
+  const row = findRow(type, id);
+  if (!row) return;
+  currentEditId = id; currentEditType = type;
+  currentAddSection = TYPE_TO_SECTION[type];
+  currentSubtype = TYPE_TO_SUBTYPE[type] || null;
+  const title = document.getElementById('addModalTitle');
+  if (title) title.textContent = 'Edit Entry';
+  const saveBtn = document.getElementById('addModalSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Save Changes';
+  clearEntryForm();
+  configureEntryFormFields(currentAddSection, currentSubtype, true);
+  fillEntryForm(type, row);
+  document.getElementById('addModal').classList.add('show');
+}
+
+export function openAddLicModal() {
+  currentLicEditId = null;
+  const title = document.querySelector('#addLicModal .modal-header h3');
+  if (title) title.textContent = 'Add License';
+  const saveBtn = document.getElementById('addLicModalSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Save License';
+  ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const type = document.getElementById('lf-type'); if (type) type.selectedIndex = 0;
+  const loc = document.getElementById('lf-loc'); if (loc) loc.selectedIndex = 0;
+  const folder = document.getElementById('lf-folder'); if (folder) folder.selectedIndex = 0;
+  document.getElementById('addLicModal').classList.add('show');
+}
+
+export function openEditLicModal(id) {
+  const lic = licenses.find(l => l.id === id);
+  if (!lic) return;
+  currentLicEditId = id;
+  const title = document.querySelector('#addLicModal .modal-header h3');
+  if (title) title.textContent = 'Edit License';
+  const saveBtn = document.getElementById('addLicModalSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Save Changes';
+  const setVal = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v ?? ''; };
+  setVal('lf-company', lic.company); setVal('lf-type', lic.type); setVal('lf-loc', lic.loc);
+  setVal('lf-expiry', toInputDateStr(lic.expiry)); setVal('lf-limit', lic.limit); setVal('lf-current', lic.current);
+  setVal('lf-folder', lic.folder); setVal('lf-remarks', lic.remarks);
+  document.getElementById('addLicModal').classList.add('show');
+}
+
 export function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 export async function saveNewEntry() {
@@ -441,19 +737,44 @@ export async function saveNewEntry() {
   const notes = document.getElementById('f-notes').value.trim();
   const dateObj = new Date(dateVal);
   const fiscalYear = computeFiscalYear(dateObj);
+  const isEdit = !!currentEditId;
+
+  let type, fields, cacheArr;
+  if (currentAddSection === 'monthly') {
+    type = 'monthly'; cacheArr = monthly;
+    fields = { date: dateObj, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes, fiscalYear };
+  } else if (currentAddSection === 'quarterly' && currentSubtype === 'clra') {
+    type = 'clra'; cacheArr = clra;
+    fields = { loc, period: desc, due: dateObj, contractors: document.getElementById('f-contractors').value.trim(), workers: document.getElementById('f-workers').value.trim(), fiscalYear };
+  } else if (currentAddSection === 'quarterly') {
+    type = 'quarterly'; cacheArr = quarterly;
+    fields = { loc, period: desc, due: dateObj, submitted: document.getElementById('f-submitted').value.trim(), note: notes, fiscalYear };
+  } else if (currentAddSection === 'halfyearly') {
+    // ESIC stays wide-format for now — only Professional Tax is
+    // addable/editable here (see configureEntryFormFields).
+    type = 'halfyearly_pt'; cacheArr = hyPt;
+    fields = { loc, period: desc, due: dateObj, status: isEdit ? (findRow(type, currentEditId)?.status || '') : '', fiscalYear };
+  } else if (currentAddSection === 'yearly') {
+    // Yearly stays wide-format for now (one doc per filing, a column per
+    // location) — not editable yet, only addable as a new org-wide filing.
+    type = 'yearly'; cacheArr = yearly;
+    fields = { name: desc, act: document.getElementById('f-act').value.trim() || '–', due: dateVal, mode: document.getElementById('f-mode').value.trim() || '–', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj, fiscalYear };
+  } else {
+    return;
+  }
 
   try {
-    if (currentAddSection === 'monthly') {
-      await addRecord('monthly', { date: dateObj, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes, fiscalYear }, desc);
-    } else if (currentAddSection === 'quarterly') {
-      await addRecord('quarterly', { loc, period: desc, due: dateObj, submitted: '', note: notes, fiscalYear }, desc);
-    } else if (currentAddSection === 'halfyearly') {
-      await addRecord('halfyearly_pt', { loc, period: desc, due: dateObj, status: '', fiscalYear }, desc);
-    } else if (currentAddSection === 'yearly') {
-      await addRecord('yearly', { name: desc, act: notes || '–', due: dateVal, mode: '–', loc, blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj, fiscalYear }, desc);
+    if (isEdit) {
+      const prevRow = findRow(currentEditType, currentEditId);
+      const prevFields = prevRow ? stripId(prevRow) : {};
+      await updateRecord(currentEditId, currentEditType, prevFields, fields, desc);
+    } else {
+      fields.sortOrder = nextSortOrder(cacheArr);
+      await addRecord(type, fields, desc);
     }
     closeModal('addModal');
-    ['f-date','f-desc','f-notes'].forEach(id => document.getElementById(id).value = '');
+    clearEntryForm();
+    currentEditId = null; currentEditType = null;
   } catch (e) { alert('Could not save: ' + e.message); }
 }
 
@@ -470,10 +791,86 @@ export async function saveNewLicense() {
     remarks: document.getElementById('lf-remarks').value.trim(),
   };
   try {
-    await addRecord('license', fields, company);
+    if (currentLicEditId) {
+      const prevLic = licenses.find(l => l.id === currentLicEditId);
+      await updateRecord(currentLicEditId, 'license', prevLic ? stripId(prevLic) : {}, fields, company);
+      currentLicEditId = null;
+    } else {
+      fields.sortOrder = nextSortOrder(licenses);
+      await addRecord('license', fields, company);
+    }
     closeModal('addLicModal');
     ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks'].forEach(id => document.getElementById(id).value = '');
   } catch (e) { alert('Could not save: ' + e.message); }
+}
+
+// Shared by every editable table/grid's ✏️ button.
+export function editRecord(id, type) {
+  if (type === 'license') openEditLicModal(id);
+  else openEditModal(id, type);
+}
+
+// ═══════════════════════════════════════════
+// COMPLETION CHECKBOX — checking a box asks whether it was on time or
+// delayed; delayed completions capture the real date and flag the record
+// for an escalation email (picked up by the next daily reminder run).
+// Unchecking (marking not-done) is always a direct toggle, no prompt.
+// ═══════════════════════════════════════════
+let pendingCompletion = null; // { id, type, cb, summary }
+
+export async function promptCompletion(id, type, cb, summary) {
+  if (!cb.checked) {
+    const extra = {};
+    if (type === 'quarterly') extra.submitted = '';
+    if (type === 'halfyearly_esic' || type === 'halfyearly_pt') extra.status = '';
+    try { await toggleRecordDone(id, type, {}, false, summary, extra); }
+    catch (e) { alert('Could not update: ' + e.message); cb.checked = true; }
+    return;
+  }
+  pendingCompletion = { id, type, cb, summary };
+  const summaryEl = document.getElementById('delayModalSummary');
+  if (summaryEl) summaryEl.textContent = summary || '';
+  const dateRow = document.getElementById('delayDateRow');
+  if (dateRow) dateRow.style.display = 'none';
+  const footer = document.getElementById('delayModalFooter');
+  if (footer) footer.style.display = 'none';
+  const dateInput = document.getElementById('f-delay-date');
+  if (dateInput) dateInput.value = '';
+  document.getElementById('delayModal').classList.add('show');
+}
+
+export function showDelayDate() {
+  const dateRow = document.getElementById('delayDateRow');
+  if (dateRow) dateRow.style.display = '';
+  const footer = document.getElementById('delayModalFooter');
+  if (footer) footer.style.display = 'flex';
+  const dateInput = document.getElementById('f-delay-date');
+  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+}
+
+export async function confirmCompletion(delayed) {
+  if (!pendingCompletion) return;
+  const { id, type, cb, summary } = pendingCompletion;
+  let completedDate = new Date();
+  if (delayed) {
+    const dateVal = document.getElementById('f-delay-date').value;
+    if (!dateVal) { alert('Please enter the actual completion date.'); return; }
+    completedDate = new Date(dateVal);
+  }
+  const extra = { completedDelayed: delayed, completedDate };
+  if (delayed) extra.escalationPending = true;
+  if (type === 'quarterly') extra.submitted = fmtShort(completedDate);
+  if (type === 'halfyearly_esic' || type === 'halfyearly_pt') extra.status = 'Done';
+  try {
+    await toggleRecordDone(id, type, {}, true, summary, extra);
+    closeModal('delayModal');
+    pendingCompletion = null;
+  } catch (e) { alert('Could not update: ' + e.message); cb.checked = false; }
+}
+
+export function cancelCompletion() {
+  if (pendingCompletion) { pendingCompletion.cb.checked = false; pendingCompletion = null; }
+  closeModal('delayModal');
 }
 
 // ═══════════════════════════════════════════
@@ -507,10 +904,10 @@ export function exportCSV() {
   if (!isAdmin()) { alert('Only the Administrator can export reports.'); return; }
   const rows = [['Section','Date','Description','Category','Location','Status']];
   monthly.forEach(i => rows.push(['Monthly', fmt(i.date), i.desc, i.cat, i.loc, i.done ? 'Done' : getStatus(i.date)]));
-  quarterly.forEach(i => rows.push(['Quarterly', fmt(i.due), i.period || `${i.from||''} - ${i.to||''}`, '', i.loc, i.submitted ? 'Submitted' : getStatus(i.due)]));
-  clra.forEach(i => rows.push(['CLRA', fmt(i.due), i.period, '', i.loc, getStatus(i.due)]));
+  quarterly.forEach(i => rows.push(['Quarterly', fmt(i.due), i.period || `${i.from||''} - ${i.to||''}`, '', i.loc, (i.submitted || i.done) ? 'Submitted' : getStatus(i.due)]));
+  clra.forEach(i => rows.push(['CLRA', fmt(i.due), i.period, '', i.loc, i.done ? 'Done' : getStatus(i.due)]));
   hyEsic.forEach(i => rows.push(['Half-Yearly ESIC', fmt(i.due), i.period, 'ESIC', '', getStatus(i.due)]));
-  hyPt.forEach(i => rows.push(['Half-Yearly PT', fmt(i.due), i.period, 'PT', i.loc, i.status || getStatus(i.due)]));
+  hyPt.forEach(i => rows.push(['Half-Yearly PT', fmt(i.due), i.period, 'PT', i.loc, (i.status==='Done'||i.done) ? 'Submitted' : getStatus(i.due)]));
   yearly.forEach(i => rows.push(['Yearly', i.due, i.name, i.act, '', i.done ? 'Done' : 'Pending']));
   licenses.forEach(i => rows.push(['License', i.expiry ? fmt(i.expiry) : '', i.company, i.type, i.loc, i.expiry && i.expiry < new Date() ? 'Expired' : 'Valid']));
   const csv = rows.map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');

@@ -2,3 +2,9 @@ node_modules/
 .firebase/
 .claude/
 *.log
+
+# Service-account keys and one-off migration backups must never be
+# committed — they contain live credentials / full business data dumps.
+scripts/*serviceAccount*.json
+scripts/*firebase-adminsdk*.json
+scripts/backup-*.json

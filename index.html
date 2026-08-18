@@ -146,6 +146,7 @@
       <button class="filter-btn" onclick="filterCat('ESI',this)">ESI</button>
       <button class="filter-btn" onclick="filterCat('PT',this)">Prof. Tax</button>
       <button class="filter-btn" onclick="filterCat('LWF',this)">LWF</button>
+      <select class="sort-select" id="sort-monthly" onchange="appSetSortMode('monthly',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select>
       <button class="add-row-btn" onclick="openAddModal('monthly')">＋ Add Entry</button>
     </div>
   </div>
@@ -154,7 +155,7 @@
 
   <div class="compliance-table-wrap">
     <table class="compliance-table">
-      <thead><tr><th style="width:32px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:60px"></th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th style="width:32px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:80px"></th></tr></thead>
       <tbody id="complianceTbody"></tbody>
     </table>
   </div>
@@ -188,16 +189,22 @@
     <button class="add-row-btn" onclick="openAddModal('quarterly')">＋ Add Entry</button>
   </div>
   <div class="period-section">
-    <div class="period-section-header"><h4>Employment Exchange Returns (Form ER-1) – All Locations (25+ Employees)</h4><span class="cat-badge cat-se" style="font-size:11px">S&E Act</span></div>
+    <div class="period-section-header"><h4>Employment Exchange Returns (Form ER-1) – All Locations (25+ Employees)</h4>
+      <div style="display:flex;gap:8px;align-items:center"><span class="cat-badge cat-se" style="font-size:11px">S&E Act</span>
+      <select class="sort-select" id="sort-quarterly" onchange="appSetSortMode('quarterly',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select></div>
+    </div>
     <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Location</th><th>Period</th><th>Due Date</th><th>Submitted On</th><th>Status</th><th>Action</th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th>#</th><th>Location</th><th>Period</th><th>Due Date</th><th>Submitted On</th><th>Status</th><th>Action</th></tr></thead>
       <tbody id="quarterlyTbody"></tbody>
     </table></div>
   </div>
   <div class="period-section">
-    <div class="period-section-header"><h4>Contract Labour (CLRA) – Quarterly Returns</h4><span class="cat-badge cat-clra" style="font-size:11px">CLRA Act</span></div>
+    <div class="period-section-header"><h4>Contract Labour (CLRA) – Quarterly Returns</h4>
+      <div style="display:flex;gap:8px;align-items:center"><span class="cat-badge cat-clra" style="font-size:11px">CLRA Act</span>
+      <select class="sort-select" id="sort-clra" onchange="appSetSortMode('clra',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select></div>
+    </div>
     <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Location</th><th>Contractors</th><th>Period</th><th>Due Date</th><th>Status</th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th>#</th><th>Location</th><th>Contractors</th><th>Period</th><th>Due Date</th><th>Status</th></tr></thead>
       <tbody id="clraTbody"></tbody>
     </table></div>
   </div>
@@ -226,9 +233,12 @@
     </table></div>
   </div>
   <div class="period-section">
-    <div class="period-section-header"><h4>Professional Tax – Half-Yearly (Wayanad / Kerala)</h4><span class="cat-badge cat-pt" style="font-size:11px">Prof. Tax</span></div>
+    <div class="period-section-header"><h4>Professional Tax – Half-Yearly (Wayanad / Kerala)</h4>
+      <div style="display:flex;gap:8px;align-items:center"><span class="cat-badge cat-pt" style="font-size:11px">Prof. Tax</span>
+      <select class="sort-select" id="sort-pt" onchange="appSetSortMode('pt',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select></div>
+    </div>
     <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>Location</th><th>Status</th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th>#</th><th>Period</th><th>Due Date</th><th>Location</th><th>Status</th></tr></thead>
       <tbody id="halfYearlyPtTbody"></tbody>
     </table></div>
   </div>
@@ -285,6 +295,7 @@
       <button class="filter-btn" onclick="filterLic('PT',this)">Prof. Tax</button>
       <button class="filter-btn" onclick="filterLic('Factory',this)">Factory</button>
       <button class="filter-btn" onclick="filterLic('CLRA',this)">CLRA</button>
+      <select class="sort-select" id="sort-licenses" onchange="appSetSortMode('licenses',this.value)"><option value="date">Sort: Expiry Date</option><option value="custom">Sort: Custom Order</option></select>
       <button class="license-add-btn" onclick="openAddLicModal()">＋ Add License</button>
     </div>
   </div>
@@ -371,9 +382,21 @@
           </select>
         </div>
       </div>
+      <div class="form-row" id="f-subtype-row" style="display:none">
+        <div class="form-group"><label>Filing Type *</label><select class="form-input" id="f-subtype"></select></div>
+      </div>
       <div class="form-group"><label>Compliance Activity / Description *</label><input type="text" class="form-input" id="f-desc" placeholder="e.g., EPFO Monthly Return – June (OCRHL Bangalore)"></div>
+      <div class="form-row" id="f-actmode-row" style="display:none">
+        <div class="form-group"><label>Act / Authority</label><input type="text" class="form-input" id="f-act" placeholder="e.g., Payment of Gratuity Act"></div>
+        <div class="form-group"><label>Mode of Filing</label><input type="text" class="form-input" id="f-mode" placeholder="e.g., Online"></div>
+      </div>
+      <div class="form-row" id="f-clra-row" style="display:none">
+        <div class="form-group"><label>Contractors</label><input type="text" class="form-input" id="f-contractors" placeholder="e.g., SIS, G4S (2 contracts)"></div>
+        <div class="form-group"><label>Workers</label><input type="text" class="form-input" id="f-workers" placeholder="e.g., SIS:8, G4S:12"></div>
+      </div>
+      <div class="form-group" id="f-submitted-row" style="display:none"><label>Submitted On</label><input type="text" class="form-input" id="f-submitted" placeholder="e.g., 29-Jul-2025 (leave blank if pending)"></div>
       <div class="form-row">
-        <div class="form-group"><label>Location</label>
+        <div class="form-group" id="f-loc-row"><label>Location</label>
           <select class="form-input" id="f-loc">
             <option value="All Locations">All Locations</option><option value="Bangalore (BLR)">Bangalore (BLR)</option><option value="Coorg">Coorg</option>
             <option value="Kabini">Kabini</option><option value="Hampi">Hampi</option><option value="Earthitects BLR">Earthitects BLR</option>
@@ -381,11 +404,11 @@
             <option value="Earth Reserve">Earth Reserve</option><option value="Mandav">Mandav</option><option value="Elkhill">Elkhill</option>
           </select>
         </div>
-        <div class="form-group"><label>Reminder (days before)</label><input type="number" class="form-input" id="f-reminder" value="7" min="1" max="30"></div>
+        <div class="form-group" id="f-reminder-row"><label>Reminder (days before)</label><input type="number" class="form-input" id="f-reminder" value="7" min="1" max="30"></div>
       </div>
       <div class="form-group"><label>Remarks / Notes</label><input type="text" class="form-input" id="f-notes" placeholder="Optional remarks"></div>
     </div>
-    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button><button class="btn-save" onclick="saveNewEntry()">Add Entry</button></div>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button><button class="btn-save" id="addModalSaveBtn" onclick="saveNewEntry()">Add Entry</button></div>
   </div>
 </div>
 
@@ -425,7 +448,30 @@
         <div class="form-group"><label>Remarks</label><input type="text" class="form-input" id="lf-remarks" placeholder="Optional"></div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addLicModal')">Cancel</button><button class="btn-save" onclick="saveNewLicense()">Save License</button></div>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addLicModal')">Cancel</button><button class="btn-save" id="addLicModalSaveBtn" onclick="saveNewLicense()">Save License</button></div>
+  </div>
+</div>
+
+<!-- DELAY-CONFIRMATION MODAL (shown when checking a done-checkbox) -->
+<div class="modal-overlay" id="delayModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header"><h3>Mark as Complete</h3><button class="modal-close" onclick="appCancelCompletion()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px" id="delayModalSummary"></p>
+      <p style="font-size:13px;margin-bottom:10px">Was this completed on time?</p>
+      <div style="display:flex;gap:10px;margin-bottom:4px">
+        <button class="btn-save" style="flex:1" onclick="appConfirmCompletion(false)">✅ On Time</button>
+        <button class="btn-cancel" style="flex:1" onclick="appShowDelayDate()">⏰ Delayed</button>
+      </div>
+      <div class="form-group" id="delayDateRow" style="display:none;margin-top:12px">
+        <label>Actual Completion Date *</label>
+        <input type="date" class="form-input" id="f-delay-date">
+      </div>
+    </div>
+    <div class="modal-footer" id="delayModalFooter" style="display:none">
+      <button class="btn-cancel" onclick="appCancelCompletion()">Cancel</button>
+      <button class="btn-save" onclick="appConfirmCompletion(true)">Confirm Delayed Completion</button>
+    </div>
   </div>
 </div>
 

@@ -66,6 +66,11 @@ function fmtDate(d) {
 }
 
 // Per record `type`, which field holds the due date and how "done" is decided.
+// halfyearly_pt is long-format ({ period, due, loc, status }); monthly/
+// quarterly/clra always were. halfyearly_esic and yearly are still the
+// original wide format (one doc per filing, a column per location) — a
+// long-format rewrite was prepared and deferred, see
+// scripts/migrate-longformat.js if that's picked back up later.
 const TYPE_CONFIG = {
   monthly: { dueField: "date", isDone: (doc) => !!doc.done, label: (f) => f.desc },
   quarterly: { dueField: "due", isDone: (doc) => !!doc.fields.submitted || !!doc.done, label: (f) => `${f.loc || ""} ER-1 Return`.trim() },
@@ -105,6 +110,28 @@ async function collectDueItems(db) {
   return buckets;
 }
 
+// Records the app's delay-confirmation checkbox flow flagged as delayed
+// (fields.escalationPending === true, set when a user checks "done" and
+// says it was delayed — see js/dashboard.js confirmCompletion). Reported
+// once, then cleared so it isn't resent tomorrow.
+async function collectDelayedCompletions(db) {
+  const snap = await db.collection("records").where("fields.escalationPending", "==", true).get();
+  const items = [];
+  snap.forEach((docSnap) => {
+    const doc = docSnap.data();
+    const fields = doc.fields || {};
+    const cfg = TYPE_CONFIG[doc.type];
+    const label = cfg ? cfg.label(fields) : (fields.name || fields.desc || fields.company || "(untitled)");
+    items.push({
+      ref: docSnap.ref, label, loc: fields.loc || "",
+      due: toDate(fields[cfg?.dueField] || fields.due || fields.date || fields.dateObj),
+      completedDate: toDate(fields.completedDate),
+    });
+  });
+  items.sort((a, b) => (a.completedDate || 0) - (b.completedDate || 0));
+  return items;
+}
+
 async function collectLicenseAlerts(db) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const buckets = { dueSoon: [], overdue: [], escalation: [] };
@@ -137,6 +164,17 @@ function renderSection(title, items) {
     </table>`;
 }
 
+function renderDelayedSection(items) {
+  if (!items.length) return "";
+  const rows = items.map((i) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${fmtDate(i.due)}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${i.label}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${i.loc}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${fmtDate(i.completedDate)}</td></tr>`).join("");
+  return `
+    <h3 style="margin:20px 0 8px;color:#1B2B4B;font-family:sans-serif">Delayed Completions (${items.length})</h3>
+    <table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px">
+      <thead><tr style="background:#1B2B4B;color:#fff"><th style="padding:6px 10px;text-align:left">Due Date</th><th style="padding:6px 10px;text-align:left">Item</th><th style="padding:6px 10px;text-align:left">Location</th><th style="padding:6px 10px;text-align:left">Actually Completed</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function footerHtml() {
   return `<p style="margin-top:20px;font-family:sans-serif;font-size:13px">
     <a href="${DASHBOARD_URL}" style="color:#C9A84C">Open the dashboard</a> to review or mark items done.
@@ -156,6 +194,7 @@ async function main() {
   const db = initFirebase();
   const items = await collectDueItems(db);
   const licenses = await collectLicenseAlerts(db);
+  const delayed = await collectDelayedCompletions(db);
 
   const dueSoon = [...items.dueSoon, ...licenses.dueSoon];
   const overdue = [...items.overdue, ...licenses.overdue];
@@ -207,8 +246,31 @@ async function main() {
     console.log(`Escalation email sent to ${REMINDER_RECIPIENT}, ${ESCALATION_RECIPIENT}: ${escalation.length} item(s).`);
   }
 
+  if (delayed.length) {
+    const html = `
+      <div style="font-family:sans-serif;color:#1B2B4B">
+        <h2 style="font-family:sans-serif;color:#DC2626">HR Compliance Dashboard — Delayed Completion Escalation</h2>
+        <p style="font-family:sans-serif;font-size:13px;color:#555">
+          The following item(s) were marked complete in the dashboard, but the person who checked them off confirmed they were completed late.
+        </p>
+        ${renderDelayedSection(delayed)}
+        ${footerHtml()}
+      </div>`;
+    await sendMail(transporter, {
+      to: [REMINDER_RECIPIENT, ESCALATION_RECIPIENT].join(","),
+      subject: `HR Compliance: ${delayed.length} item(s) completed late`,
+      html,
+    });
+    // Clear the flag so tomorrow's run doesn't resend the same items.
+    const batch = db.batch();
+    delayed.forEach((i) => batch.update(i.ref, { "fields.escalationPending": false }));
+    await batch.commit();
+    sentCount++;
+    console.log(`Delayed-completion escalation sent to ${REMINDER_RECIPIENT}, ${ESCALATION_RECIPIENT}: ${delayed.length} item(s).`);
+  }
+
   if (!sentCount) {
-    console.log("Nothing matched today's trigger points (due in " + REMINDER_BEFORE_DAYS + " days / " + REMINDER_AFTER_DAYS + " day overdue / " + ESCALATION_AFTER_DAYS + " days overdue) — no email sent.");
+    console.log("Nothing matched today's trigger points (due in " + REMINDER_BEFORE_DAYS + " days / " + REMINDER_AFTER_DAYS + " day overdue / " + ESCALATION_AFTER_DAYS + " days overdue / delayed completions) — no email sent.");
   }
 }
 

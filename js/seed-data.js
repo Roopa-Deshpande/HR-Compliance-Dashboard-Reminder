@@ -99,6 +99,12 @@ function buildClraData(yearOffset) {
   ];
 }
 
+// NOTE: this stays in the original wide format (one doc per period, a
+// column per location) — matching what's still live in Firestore. A
+// long-format rewrite (matching halfyearly_pt's { period, due, loc,
+// status } shape) was prepared and reverted; see js/seed-data-longformat
+// history / scripts/migrate-longformat.js if that upgrade is picked back
+// up later.
 function buildHalfYearlyEsic(yearOffset) {
   const D = (y, m, d) => new Date(y + yearOffset, m, d);
   // The actual FY2025-26 filings (offset 0) were already done at the time
@@ -118,6 +124,10 @@ function buildHalfYearlyPt(yearOffset) {
   ];
 }
 
+// NOTE: this stays in the original wide format (one doc per filing type, a
+// column per location) — matching what's still live in Firestore. A
+// long-format rewrite was prepared and reverted; see
+// scripts/migrate-longformat.js if that upgrade is picked back up later.
 function buildYearlyData(yearOffset) {
   const D = (y, m, d) => new Date(y + yearOffset, m, d);
   // ✓ marks below record filings already completed for the actual
@@ -174,19 +184,22 @@ const licenseData = [
 // Builds the year-scoped docs (monthly/quarterly/clra/halfyearly/yearly),
 // each tagged fields.fiscalYear = fiscalYear, dates shifted by yearOffset
 // years relative to the original FY2025-26 dataset.
+// sortOrder is assigned here (index * 10, gaps left for later manual
+// inserts-between) rather than inside each generator, so every record type
+// gets a sane default drag-reorder position from a single place.
 function buildYearScopedDocs(yearOffset, fiscalYear) {
   const docs = [];
-  buildMonthlyData(yearOffset).forEach(f => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date), fiscalYear } }));
-  buildQuarterlyData(yearOffset).forEach(f => docs.push({ type: 'quarterly', fields: { ...f, due: ts(f.due), fiscalYear } }));
-  buildClraData(yearOffset).forEach(f => docs.push({ type: 'clra', fields: { ...f, due: ts(f.due), fiscalYear } }));
-  buildHalfYearlyEsic(yearOffset).forEach(f => docs.push({ type: 'halfyearly_esic', fields: { ...f, due: ts(f.due), fiscalYear } }));
-  buildHalfYearlyPt(yearOffset).forEach(f => docs.push({ type: 'halfyearly_pt', fields: { ...f, due: ts(f.due), fiscalYear } }));
-  buildYearlyData(yearOffset).forEach(f => docs.push({ type: 'yearly', fields: { ...f, dateObj: ts(f.dateObj), fiscalYear } }));
+  buildMonthlyData(yearOffset).forEach((f, i) => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date), fiscalYear, sortOrder: i * 10 } }));
+  buildQuarterlyData(yearOffset).forEach((f, i) => docs.push({ type: 'quarterly', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
+  buildClraData(yearOffset).forEach((f, i) => docs.push({ type: 'clra', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
+  buildHalfYearlyEsic(yearOffset).forEach((f, i) => docs.push({ type: 'halfyearly_esic', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
+  buildHalfYearlyPt(yearOffset).forEach((f, i) => docs.push({ type: 'halfyearly_pt', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
+  buildYearlyData(yearOffset).forEach((f, i) => docs.push({ type: 'yearly', fields: { ...f, dateObj: ts(f.dateObj), fiscalYear, sortOrder: i * 10 } }));
   return docs;
 }
 
 function buildLicenseDocs() {
-  return licenseData.map(f => ({ type: 'license', fields: { ...f, expiry: ts(f.expiry) } }));
+  return licenseData.map((f, i) => ({ type: 'license', fields: { ...f, expiry: ts(f.expiry), sortOrder: i * 10 } }));
 }
 
 async function commitDocs(docs) {
