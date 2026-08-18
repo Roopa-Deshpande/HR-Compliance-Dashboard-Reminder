@@ -140,7 +140,6 @@ window.exportCSV = dash.exportCSV;
 window.appEditRecord = dash.editRecord;
 window.appSetSortMode = dash.setSortMode;
 window.appConfirmCheck = dash.promptCompletion;
-window.appShowDelayDate = dash.showDelayDate;
 window.appConfirmCompletion = dash.confirmCompletion;
 window.appCancelCompletion = dash.cancelCompletion;
 window.appDeleteRecord = dash.deleteEntry;
