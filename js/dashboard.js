@@ -351,8 +351,8 @@ function renderMonthlyTable(mIdx) {
       <td class="desc-cell">${esc(item.desc)}${item.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${esc(item.notes)}</span>` : ''}</td>
       <td>${catBadge(item.cat)}</td>
       <td><span class="location-tag">${esc(item.loc)||'–'}</span></td>
-      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, item.done)}${onTimeLateBadge(item)}</td>
-      <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(item.id,'monthly')}${markCompleteBtnHtml(item.id,'monthly',item.desc,dueMs,item.done)}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
+      <td style="white-space:nowrap">${statusPill(status, item.done)}${onTimeLateBadge(item)}</td>
+      <td style="white-space:nowrap">${editBtnHtml(item.id,'monthly')}${markCompleteBtnHtml(item.id,'monthly',item.desc,dueMs,item.done)}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
     </tr>`;
   }).join('');
 }
@@ -421,8 +421,8 @@ function renderQuarterlyTable() {
         <td>${esc(period)}</td>
         <td class="date-cell">${fmt(row.due)}</td>
         <td>${row.submitted ? `<span style="color:var(--upcoming);font-weight:600">${esc(row.submitted)}</span>` : '<em style="color:#9ca3af">Pending</em>'}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${done ? statusPill('done',true) : statusPill(status,false)}${onTimeLateBadge(row)}</td>
-        <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(row.id,'quarterly')}${markCompleteBtnHtml(row.id,'quarterly',period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'quarterly', period)}</td>
+        <td style="white-space:nowrap">${done ? statusPill('done',true) : statusPill(status,false)}${onTimeLateBadge(row)}</td>
+        <td style="white-space:nowrap">${editBtnHtml(row.id,'quarterly')}${markCompleteBtnHtml(row.id,'quarterly',period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'quarterly', period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="8"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -439,7 +439,7 @@ function renderQuarterlyTable() {
         <td style="font-size:12px">${esc(row.contractors)||'–'}</td>
         <td>${esc(row.period)||'–'}</td>
         <td class="date-cell">${fmt(row.due)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, row.done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'clra')}${markCompleteBtnHtml(row.id,'clra',row.period||row.loc,row.due?row.due.getTime():null,row.done)}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
+        <td style="white-space:nowrap">${statusPill(status, row.done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'clra')}${markCompleteBtnHtml(row.id,'clra',row.period||row.loc,row.due?row.due.getTime():null,row.done)}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="7"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -473,7 +473,7 @@ function renderHalfYearlyTables() {
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
         <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
         <td>${doneClass(row.hampi)}</td><td>${doneClass(row.eblr)}</td><td>${doneClass(row.ewd)}</td><td>${doneClass(row.tl)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_esic')}${markCompleteBtnHtml(row.id,'halfyearly_esic',row.period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
+        <td style="white-space:nowrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_esic')}${markCompleteBtnHtml(row.id,'halfyearly_esic',row.period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="12"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -490,7 +490,7 @@ function renderHalfYearlyTables() {
       return `<tr data-record-id="${row.id}" draggable="${draggable}">
         <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_pt')}${markCompleteBtnHtml(row.id,'halfyearly_pt',(row.period||'')+' – '+(row.loc||''),row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
+        <td style="white-space:nowrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_pt')}${markCompleteBtnHtml(row.id,'halfyearly_pt',(row.period||'')+' – '+(row.loc||''),row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="6"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -528,7 +528,7 @@ function renderYearlyTable() {
       <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
       <td>${doneClass(row.hampi)}</td><td>${doneClass(row.ear)}</td><td>${doneClass(row.tl)}</td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.others)||'–'}</td>
-      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'yearly')}${markCompleteBtnHtml(row.id,'yearly',row.name,row.dateObj?row.dateObj.getTime():null,done)}${delBtnHtml(row.id,'yearly', row.name)}</td>
+      <td style="white-space:nowrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'yearly')}${markCompleteBtnHtml(row.id,'yearly',row.name,row.dateObj?row.dateObj.getTime():null,done)}${delBtnHtml(row.id,'yearly', row.name)}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="14"><div class="empty-state">No entries yet.</div></td></tr>`;
 }
