@@ -347,6 +347,8 @@
     <button class="add-row-btn" onclick="appRunSeed()">⬇️ Import Initial Dataset (FY 2025-26)</button>
     <p style="font-size:12px;color:var(--text-muted);margin:16px 0 12px">Load the FY 2026-27 recurring compliance calendar — same categories and pattern as FY 2025-26, dates shifted forward one year. Licenses aren't duplicated (they're shared across years). Safe to click — it refuses to run if FY 2026-27 records already exist.</p>
     <button class="add-row-btn" onclick="appRunSeedNextYear()">⬇️ Import FY 2026-27 Dataset</button>
+    <p style="font-size:12px;color:var(--text-muted);margin:16px 0 12px">PF/ESI/PT are compliance obligations for a wage month but are actually filed/paid the following month (PF &amp; ESI by the 15th, PT by the 20th). This corrects existing monthly records' Due Date to the correct following month and tags each with its own Compliance Month, so April's sheet stays April's sheet even though its filing happens in May. Safe to click more than once.</p>
+    <button class="add-row-btn" onclick="appRunMigrateMonthly()">🛠️ Fix Monthly Compliance / Due Dates</button>
   </div>
 
   <div class="admin-panel-wrap">
@@ -378,7 +380,9 @@
     <div class="modal-header"><h3 id="addModalTitle">Add Compliance Entry</h3><button class="modal-close" onclick="closeModal('addModal')">×</button></div>
     <div class="modal-body">
       <div class="form-row">
-        <div class="form-group"><label>Due Date *</label><input type="date" class="form-input" id="f-date"></div>
+        <div class="form-group"><label>Due Date *</label><input type="date" class="form-input" id="f-date">
+          <p id="f-compliance-hint" style="display:none;font-size:11px;color:var(--text-muted);margin-top:3px"></p>
+        </div>
         <div class="form-group" id="f-cat-row"><label>Category *</label>
           <select class="form-input" id="f-cat">
             <option value="PF">Provident Fund (PF)</option><option value="ESI">ESI</option><option value="PT">Professional Tax</option>

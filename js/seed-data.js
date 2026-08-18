@@ -29,8 +29,19 @@ const LOCS = {
 
 // yearOffset: 0 = the original FY2025-26 dataset's dates as written below;
 // +1 shifts every date forward exactly one year, producing FY2026-27, etc.
+//
+// COMPLIANCE MONTH vs DUE DATE: PF/ESI/PT are compliance obligations for a
+// given wage month, but are actually filed/paid the FOLLOWING month (PF &
+// ESI by the 15th, PT by the 20th) — e.g. April's compliance is filed in
+// May, due 15 May. Each record therefore carries two separate fields:
+//   complianceMonth — 1st of the month the obligation is FOR (drives which
+//                      month-tab sheet it's grouped under, and fiscalYear)
+//   date            — the real statutory due date, one month later (drives
+//                      status/overdue, reminders, and On Time/Late)
+// This keeps "April's sheet" showing April's compliance items even though
+// their due date falls in May — they never get shifted into May's sheet
+// just because that's when the challan is actually filed.
 function buildMonthlyData(yearOffset) {
-  const D = (y, m, d) => new Date(y + yearOffset, m, d);
   const data = [];
   const pfEntities = [
     { name:'EPFO – OCRHL (BLR+Coorg+Kabini)', loc: LOCS.BLR },
@@ -55,12 +66,20 @@ function buildMonthlyData(yearOffset) {
     { name:'PT – Earth Reserve', loc: LOCS.ER },
   ];
   for (let m = 3; m <= 14; m++) {
-    const yr = m > 11 ? 2026 : 2025;
-    const mo = m % 12;
-    pfEntities.forEach(e => data.push({ date: D(yr, mo, 14), desc: `PF Challan Payment – ${months[mo]} (${e.name})`, cat: 'PF', loc: e.loc, reminderDays: 7, notes: '' }));
-    esicEntities.forEach(e => data.push({ date: D(yr, mo, 15), desc: `ESI Challan Payment – ${months[mo]} (${e.name})`, cat: 'ESI', loc: e.loc, reminderDays: 7, notes: '' }));
-    ptEntities.forEach(e => data.push({ date: D(yr, mo, 20), desc: `Professional Tax Return – ${months[mo]} (${e.name})`, cat: 'PT', loc: e.loc, reminderDays: 7, notes: '' }));
-    if (mo === 0) data.push({ date: D(yr, 0, 15), desc: `Labour Welfare Fund – Payment & Return (Karnataka)`, cat: 'LWF', loc: LOCS.ALL, reminderDays: 7, notes: '' });
+    const complianceYr = (m > 11 ? 2026 : 2025) + yearOffset;
+    const complianceMo = m % 12;
+    const complianceMonth = new Date(complianceYr, complianceMo, 1);
+    // new Date() normalizes month overflow itself (Dec + 1 → Jan of the
+    // next year), so a March compliance month's due date correctly lands
+    // in April of the following calendar year without special-casing.
+    const dueDate = (day) => new Date(complianceYr, complianceMo + 1, day);
+    const label = `${months[complianceMo]} ${complianceYr}`;
+    pfEntities.forEach(e => data.push({ date: dueDate(15), complianceMonth, desc: `PF Challan Payment – ${label} (${e.name})`, cat: 'PF', loc: e.loc, reminderDays: 7, notes: '' }));
+    esicEntities.forEach(e => data.push({ date: dueDate(15), complianceMonth, desc: `ESI Challan Payment – ${label} (${e.name})`, cat: 'ESI', loc: e.loc, reminderDays: 7, notes: '' }));
+    ptEntities.forEach(e => data.push({ date: dueDate(20), complianceMonth, desc: `Professional Tax Return – ${label} (${e.name})`, cat: 'PT', loc: e.loc, reminderDays: 7, notes: '' }));
+    // LWF is an annual (not monthly-recurring) filing, due within the same
+    // month it's for — no compliance/due-date split needed here.
+    if (complianceMo === 0) data.push({ date: new Date(complianceYr, 0, 15), complianceMonth, desc: `Labour Welfare Fund – Payment & Return (Karnataka)`, cat: 'LWF', loc: LOCS.ALL, reminderDays: 7, notes: '' });
   }
   return data;
 }
@@ -189,7 +208,7 @@ const licenseData = [
 // gets a sane default drag-reorder position from a single place.
 function buildYearScopedDocs(yearOffset, fiscalYear) {
   const docs = [];
-  buildMonthlyData(yearOffset).forEach((f, i) => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date), fiscalYear, sortOrder: i * 10 } }));
+  buildMonthlyData(yearOffset).forEach((f, i) => docs.push({ type: 'monthly', fields: { ...f, date: ts(f.date), complianceMonth: ts(f.complianceMonth), fiscalYear, sortOrder: i * 10 } }));
   buildQuarterlyData(yearOffset).forEach((f, i) => docs.push({ type: 'quarterly', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
   buildClraData(yearOffset).forEach((f, i) => docs.push({ type: 'clra', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
   buildHalfYearlyEsic(yearOffset).forEach((f, i) => docs.push({ type: 'halfyearly_esic', fields: { ...f, due: ts(f.due), fiscalYear, sortOrder: i * 10 } }));
@@ -253,4 +272,51 @@ export async function seedNextFiscalYear() {
     previousValue: null, newValue: { count: docs.length }
   });
   return docs.length;
+}
+
+// One-off correction for PF/ESI/PT monthly records seeded before
+// Compliance Month was decoupled from the statutory due date (they used
+// to share one date, in the same month, which was wrong — the real due
+// date is in the FOLLOWING month). Uses the client SDK under the signed-in
+// admin's own account, so no service-account key or Admin SDK script is
+// needed. Idempotent: any record that already has fields.complianceMonth
+// (freshly seeded ones already do) is left untouched, so it's safe to run
+// more than once and covers every fiscal year already in the database in
+// one pass. LWF and any manually-added monthly entries are left alone —
+// only PF/ESI/PT are affected by the compliance-month/due-date split.
+export async function migrateMonthlyComplianceDates() {
+  if (!isAdmin()) throw new Error("Only the Administrator can run this migration.");
+  const snap = await getDocs(query(collection(db, "records"), where("type", "==", "monthly")));
+  const toFix = [];
+  snap.forEach(docSnap => {
+    const f = docSnap.data().fields || {};
+    if (f.complianceMonth) return; // already migrated / freshly seeded correctly
+    if (!['PF', 'ESI', 'PT'].includes(f.cat)) return; // leave LWF / ad-hoc entries alone
+    const oldDate = f.date && f.date.toDate ? f.date.toDate() : null;
+    if (!oldDate) return;
+    const complianceMonth = new Date(oldDate.getFullYear(), oldDate.getMonth(), 1);
+    const dueDay = f.cat === 'PT' ? 20 : 15;
+    const newDate = new Date(oldDate.getFullYear(), oldDate.getMonth() + 1, dueDay);
+    toFix.push({ id: docSnap.id, complianceMonth, newDate });
+  });
+
+  const CHUNK = 400;
+  for (let i = 0; i < toFix.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    toFix.slice(i, i + CHUNK).forEach(r => {
+      batch.update(doc(db, "records", r.id), {
+        "fields.complianceMonth": ts(r.complianceMonth),
+        "fields.date": ts(r.newDate),
+        updatedAt: serverTimestamp(), updatedBy: currentUser?.name || "Unknown"
+      });
+    });
+    await batch.commit();
+  }
+
+  await logAction({
+    action: "Edit", recordType: "monthly", recordId: "migrate-compliance-dates",
+    recordSummary: `Corrected Compliance Month / Due Date for ${toFix.length} PF/ESI/PT monthly record(s)`,
+    previousValue: null, newValue: { count: toFix.length }
+  });
+  return toFix.length;
 }

@@ -222,7 +222,14 @@ export function initDashboard() {
   document.querySelectorAll('.fy-switch-btn').forEach(b => b.classList.toggle('active', b.dataset.fy === activeFiscalYear));
   const unsubs = [];
   unsubs.push(subscribeRecords('monthly', rows => {
-    monthly = rows.map(r => { const date = toDate(r.fields.date); return { id: r.id, done: r.done, ...r.fields, date, fiscalYear: r.fields.fiscalYear || computeFiscalYear(date) }; });
+    monthly = rows.map(r => {
+      const date = toDate(r.fields.date); // real statutory due date
+      // complianceMonth: which month-tab sheet this belongs to. Older
+      // records predating the compliance/due-date split (and any manually
+      // added ad-hoc entries) fall back to the due date's own month.
+      const complianceMonth = toDate(r.fields.complianceMonth) || date;
+      return { id: r.id, done: r.done, ...r.fields, date, complianceMonth, fiscalYear: r.fields.fiscalYear || computeFiscalYear(complianceMonth) };
+    });
     buildLocFilter(); buildMonthTabs(); renderMonthlyTable(activeMonthIdx); updateSummary(); buildReminders();
   }));
   unsubs.push(subscribeRecords('quarterly', rows => {
@@ -332,7 +339,9 @@ function renderMonthlyTable(mIdx) {
   if (!tbody) return;
   let filtered = monthly
     .filter(d => d.fiscalYear === activeFiscalYear)
-    .filter(d => d.date && d.date.getMonth() === mIdx)
+    // Grouped by Compliance Month, not by Due Date — April's items stay on
+    // the April sheet even though PF/ESI/PT are actually due in May.
+    .filter(d => d.complianceMonth && d.complianceMonth.getMonth() === mIdx)
     .filter(d => activeCatFilter === 'all' || d.cat === activeCatFilter)
     .filter(d => activeLocFilter === 'all' || d.loc === activeLocFilter);
   filtered = applySortMode(filtered, 'monthly', 'date');
@@ -367,7 +376,9 @@ function buildMonthTabs() {
   const tabs = document.getElementById('monthTabs');
   if (!tabs) return;
   const overdueMonths = new Set();
-  monthly.forEach(item => { if (item.fiscalYear === activeFiscalYear && !item.done && item.date && getStatus(item.date) === 'overdue') overdueMonths.add(item.date.getMonth()); });
+  // The dot lights up the item's Compliance Month tab, even though
+  // "overdue" itself is judged against the real (following-month) due date.
+  monthly.forEach(item => { if (item.fiscalYear === activeFiscalYear && !item.done && item.date && item.complianceMonth && getStatus(item.date) === 'overdue') overdueMonths.add(item.complianceMonth.getMonth()); });
   tabs.innerHTML = '';
   FISCAL_MONTH_ORDER.forEach(realIdx => {
     const btn = document.createElement('div');
@@ -697,6 +708,7 @@ function clearEntryForm() {
     el.checked = false; el.disabled = false;
     const label = el.closest('label'); if (label) label.title = '';
   });
+  const hint = document.getElementById('f-compliance-hint'); if (hint) hint.style.display = 'none';
 }
 
 function toInputDateStr(d) {
@@ -709,6 +721,11 @@ function fillEntryForm(type, row) {
   if (type === 'monthly') {
     setVal('f-date', toInputDateStr(row.date)); setVal('f-desc', row.desc); setVal('f-cat', row.cat);
     setVal('f-loc', row.loc); setVal('f-reminder', row.reminderDays || 7); setVal('f-notes', row.notes);
+    const hint = document.getElementById('f-compliance-hint');
+    if (hint && row.complianceMonth) {
+      hint.textContent = `Compliance Month: ${row.complianceMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'})} — editing Due Date here does not move this item to a different month's sheet.`;
+      hint.style.display = '';
+    }
   } else if (type === 'quarterly') {
     setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period || (row.from && row.to ? `${row.from} – ${row.to}` : ''));
     setVal('f-loc', row.loc); setVal('f-submitted', row.submitted); setVal('f-notes', row.note);
@@ -810,7 +827,12 @@ export async function saveNewEntry() {
   let type, fields, cacheArr;
   if (currentAddSection === 'monthly') {
     type = 'monthly'; cacheArr = monthly;
-    fields = { date: dateObj, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes, fiscalYear };
+    // Editing "Due Date" only changes the due date — it never moves an
+    // existing item to a different Compliance Month / sheet. New ad-hoc
+    // entries default their Compliance Month to the date entered here.
+    const prevMonthlyRow = isEdit ? findRow(type, currentEditId) : null;
+    const complianceMonth = prevMonthlyRow?.complianceMonth || dateObj;
+    fields = { date: dateObj, complianceMonth, desc, cat: document.getElementById('f-cat').value, loc, reminderDays: parseInt(document.getElementById('f-reminder').value) || 7, notes, fiscalYear: computeFiscalYear(complianceMonth) };
   } else if (currentAddSection === 'quarterly' && currentSubtype === 'clra') {
     type = 'clra'; cacheArr = clra;
     fields = { loc, period: desc, due: dateObj, contractors: document.getElementById('f-contractors').value.trim(), workers: document.getElementById('f-workers').value.trim(), fiscalYear };
@@ -1173,7 +1195,7 @@ const TYPE_ICON = {
 
 function buildSearchIndex() {
   const rows = [];
-  monthly.forEach(i => rows.push({ id: i.id, type: 'monthly', fiscalYear: i.fiscalYear, title: i.desc, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.date)} · ${i.loc || ''}`, monthIdx: i.date ? i.date.getMonth() : null, text: `${i.desc} ${i.loc} ${i.cat}`.toLowerCase() }));
+  monthly.forEach(i => rows.push({ id: i.id, type: 'monthly', fiscalYear: i.fiscalYear, title: i.desc, sub: `${fyLabel(i.fiscalYear)} · Due ${fmt(i.date)} · ${i.loc || ''}`, monthIdx: i.complianceMonth ? i.complianceMonth.getMonth() : (i.date ? i.date.getMonth() : null), text: `${i.desc} ${i.loc} ${i.cat}`.toLowerCase() }));
   quarterly.forEach(i => { const period = i.from && i.to ? `${i.from} – ${i.to}` : (i.period || ''); rows.push({ id: i.id, type: 'quarterly', fiscalYear: i.fiscalYear, title: `${i.loc || 'ER-1'} Return`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${period}`, text: `${i.loc} ${period} er-1 quarterly`.toLowerCase() }); });
   clra.forEach(i => rows.push({ id: i.id, type: 'clra', fiscalYear: i.fiscalYear, title: `${i.loc || 'CLRA'} Return`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.contractors || ''}`, text: `${i.loc} ${i.contractors} ${i.period} clra`.toLowerCase() }));
   hyEsic.forEach(i => rows.push({ id: i.id, type: 'halfyearly_esic', fiscalYear: i.fiscalYear, title: 'ESIC Half-Yearly Return', sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.period || ''}`, text: `esic half yearly ${i.period}`.toLowerCase() }));

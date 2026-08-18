@@ -3,7 +3,7 @@ import {
   watchAuth, startSessionTimeoutWatch, isAdmin, currentUser
 } from "./auth.js";
 import * as dash from "./dashboard.js";
-import { seedInitialData, seedNextFiscalYear } from "./seed-data.js";
+import { seedInitialData, seedNextFiscalYear, migrateMonthlyComplianceDates } from "./seed-data.js";
 
 let activeUnsubs = [];
 // True while the "create administrator" screen should be the one showing
@@ -122,6 +122,13 @@ window.appRunSeedNextYear = async () => {
   try {
     const n = await seedNextFiscalYear();
     alert(`Imported ${n} records for FY 2026-27.`);
+  } catch (e) { alert(e.message); }
+};
+window.appRunMigrateMonthly = async () => {
+  if (!confirm('Correct PF/ESI/PT monthly Due Dates to fall in the following month (per the statutory rule), and tag each with its own Compliance Month so it stays on its original month\'s sheet? Safe to click more than once — already-corrected records are skipped.')) return;
+  try {
+    const n = await migrateMonthlyComplianceDates();
+    alert(n > 0 ? `Corrected ${n} record(s).` : 'Nothing to correct — all monthly PF/ESI/PT records already have the right Compliance Month / Due Date.');
   } catch (e) { alert(e.message); }
 };
 
