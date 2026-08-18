@@ -91,7 +91,7 @@ function editBtnHtml(id, type) {
 function markCompleteBtnHtml(id, type, summary, dueMs, done) {
   const due = dueMs !== null && dueMs !== undefined ? dueMs : 'null';
   const title = done ? 'Completed — click to undo' : 'Mark complete';
-  return `<button class="mark-complete-btn${done?' done':''}" onclick="appToggleComplete('${id}','${type}',${JSON.stringify(summary)},${due},${done})" title="${title}">✅</button>`;
+  return `<button class="mark-complete-btn${done?' done':''}" onclick="appToggleComplete('${id}','${type}','${esc(summary).replace(/'/g,"\\'")}',${due},${done})" title="${title}">✅</button>`;
 }
 function stripId(r) { const { id, ...rest } = r; return rest; }
 
