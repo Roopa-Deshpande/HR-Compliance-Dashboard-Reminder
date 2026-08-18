@@ -17,6 +17,20 @@
       ],
       "rewrites": [
         { "source": "**", "destination": "/index.html" }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(html|js|json)",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        },
+        {
+          "source": "**/*.@(css)",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        }
       ]
     },
     {
