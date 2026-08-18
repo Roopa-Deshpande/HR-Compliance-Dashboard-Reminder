@@ -464,7 +464,7 @@ function renderHalfYearlyTables() {
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
         <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
         <td>${doneClass(row.hampi)}</td><td>${doneClass(row.eblr)}</td><td>${doneClass(row.ewd)}</td><td>${doneClass(row.tl)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_esic',this,${JSON.stringify(row.period)})">${statusPill(status, done)}${onTimeLateBadge(row)}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_esic',this,${JSON.stringify(row.period)})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_esic')}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="12"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -519,7 +519,7 @@ function renderYearlyTable() {
       <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
       <td>${doneClass(row.hampi)}</td><td>${doneClass(row.ear)}</td><td>${doneClass(row.tl)}</td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.others)||'–'}</td>
-      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','yearly',this,${JSON.stringify(row.name)})">${statusPill(status, done)}${onTimeLateBadge(row)}${delBtnHtml(row.id,'yearly', row.name)}</td>
+      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','yearly',this,${JSON.stringify(row.name)})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'yearly')}${delBtnHtml(row.id,'yearly', row.name)}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="14"><div class="empty-state">No entries yet.</div></td></tr>`;
 }
@@ -640,9 +640,10 @@ function nextSortOrder(arr) {
   return (vals.length ? Math.max(...vals) : 0) + 10;
 }
 
-// Half-Yearly only ever adds/edits Professional Tax entries here — ESIC
-// stays wide-format and isn't addable/editable through this modal yet
-// (see the "deferred alongside long-format migration" notes above).
+// Half-Yearly only ever *adds* Professional Tax entries here — ESIC has no
+// natural "add a new period" action (its two periods per FY are fixed),
+// but existing ESIC rows are still fully editable via the ✏️ button, which
+// sets currentSubtype to 'esic' directly (bypassing this dropdown).
 function subtypeOptionsHtml(section) {
   if (section === 'quarterly') return `<option value="er1">Employment Exchange (ER-1)</option><option value="clra">CLRA Return</option>`;
   return '';
@@ -650,11 +651,16 @@ function subtypeOptionsHtml(section) {
 
 function configureEntryFormFields(section, subtype, isEdit) {
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  const isEsic = section === 'halfyearly' && subtype === 'esic';
   show('f-cat-row', section === 'monthly');
   show('f-reminder-row', section === 'monthly');
   show('f-subtype-row', section === 'quarterly');
   show('f-actmode-row', section === 'yearly');
-  show('f-loc-row', section !== 'yearly'); // yearly stays wide-format — no single per-row location yet
+  // Yearly and ESIC stay wide-format (one row covers every location via a
+  // checkbox matrix instead of a single Location field).
+  show('f-loc-row', section !== 'yearly' && !isEsic);
+  show('f-esicloc-row', isEsic);
+  show('f-yearlyloc-row', section === 'yearly');
   show('f-submitted-row', section === 'quarterly' && subtype === 'er1');
   show('f-clra-row', section === 'quarterly' && subtype === 'clra');
   const subtypeSel = document.getElementById('f-subtype');
@@ -669,11 +675,19 @@ document.getElementById('f-subtype')?.addEventListener('change', (e) => {
   configureEntryFormFields(currentAddSection, currentSubtype, !!currentEditId);
 });
 
+const ESIC_LOC_CHECKBOX_IDS = ['f-esic-blr','f-esic-coorg','f-esic-kabini','f-esic-hampi','f-esic-eblr','f-esic-ewd','f-esic-tl'];
+const YEARLY_LOC_CHECKBOX_IDS = ['f-yr-blr','f-yr-coorg','f-yr-kabini','f-yr-hampi','f-yr-ear','f-yr-tl'];
+
 function clearEntryForm() {
-  ['f-date','f-desc','f-notes','f-act','f-mode','f-submitted','f-contractors','f-workers'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['f-date','f-desc','f-notes','f-act','f-mode','f-submitted','f-contractors','f-workers','f-yr-others'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cat = document.getElementById('f-cat'); if (cat) cat.selectedIndex = 0;
   const loc = document.getElementById('f-loc'); if (loc) loc.selectedIndex = 0;
   const rem = document.getElementById('f-reminder'); if (rem) rem.value = 7;
+  [...ESIC_LOC_CHECKBOX_IDS, ...YEARLY_LOC_CHECKBOX_IDS].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.checked = false; el.disabled = false;
+    const label = el.closest('label'); if (label) label.title = '';
+  });
 }
 
 function toInputDateStr(d) {
@@ -694,8 +708,25 @@ function fillEntryForm(type, row) {
     setVal('f-contractors', row.contractors); setVal('f-workers', row.workers);
   } else if (type === 'halfyearly_pt') {
     setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period); setVal('f-loc', row.loc);
+  } else if (type === 'halfyearly_esic') {
+    setVal('f-date', toInputDateStr(row.due)); setVal('f-desc', row.period);
+    const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v === 'Done'; };
+    setChk('f-esic-blr', row.blr); setChk('f-esic-coorg', row.coorg); setChk('f-esic-kabini', row.kabini);
+    setChk('f-esic-hampi', row.hampi); setChk('f-esic-eblr', row.eblr); setChk('f-esic-ewd', row.ewd); setChk('f-esic-tl', row.tl);
+  } else if (type === 'yearly') {
+    setVal('f-date', row.dateObj ? toInputDateStr(row.dateObj) : ''); setVal('f-desc', row.name);
+    setVal('f-act', row.act); setVal('f-mode', row.mode); setVal('f-yr-others', row.others);
+    // 'N/A' locations are disabled (not just unchecked) — saveNewEntry
+    // preserves N/A regardless of the checkbox, this just makes that
+    // visible instead of looking like an ordinary pending checkbox.
+    const setChk = (id, v) => {
+      const el = document.getElementById(id); if (!el) return;
+      el.checked = v === '✓'; el.disabled = v === 'N/A';
+      const label = el.closest('label'); if (label) label.title = v === 'N/A' ? 'Not applicable at this location' : '';
+    };
+    setChk('f-yr-blr', row.blr); setChk('f-yr-coorg', row.coorg); setChk('f-yr-kabini', row.kabini);
+    setChk('f-yr-hampi', row.hampi); setChk('f-yr-ear', row.ear); setChk('f-yr-tl', row.tl);
   }
-  // halfyearly_esic / yearly: not reachable — see openEditModal's guard.
 }
 
 export function openAddModal(section) {
@@ -712,10 +743,6 @@ export function openAddModal(section) {
 }
 
 export function openEditModal(id, type) {
-  // halfyearly_esic / yearly stay wide-format for now — no edit button is
-  // ever rendered for them, but guard here too in case this is ever
-  // reached another way, since this modal assumes long-format fields.
-  if (type === 'halfyearly_esic' || type === 'yearly') return;
   const row = findRow(type, id);
   if (!row) return;
   currentEditId = id; currentEditType = type;
@@ -781,16 +808,36 @@ export async function saveNewEntry() {
   } else if (currentAddSection === 'quarterly') {
     type = 'quarterly'; cacheArr = quarterly;
     fields = { loc, period: desc, due: dateObj, submitted: document.getElementById('f-submitted').value.trim(), note: notes, fiscalYear };
+  } else if (currentAddSection === 'halfyearly' && currentSubtype === 'esic') {
+    // ESIC stays wide-format — editable (7-location checkbox matrix) but
+    // never addable: its two periods per FY are fixed, this branch is
+    // edit-only (Add always implies the 'pt' subtype, never 'esic').
+    type = 'halfyearly_esic'; cacheArr = hyEsic;
+    const chk = id => document.getElementById(id)?.checked ? 'Done' : '';
+    fields = {
+      period: desc, due: dateObj,
+      blr: chk('f-esic-blr'), coorg: chk('f-esic-coorg'), kabini: chk('f-esic-kabini'), hampi: chk('f-esic-hampi'),
+      eblr: chk('f-esic-eblr'), ewd: chk('f-esic-ewd'), tl: chk('f-esic-tl'),
+      fiscalYear
+    };
   } else if (currentAddSection === 'halfyearly') {
-    // ESIC stays wide-format for now — only Professional Tax is
-    // addable/editable here (see configureEntryFormFields).
     type = 'halfyearly_pt'; cacheArr = hyPt;
     fields = { loc, period: desc, due: dateObj, status: isEdit ? (findRow(type, currentEditId)?.status || '') : '', fiscalYear };
   } else if (currentAddSection === 'yearly') {
-    // Yearly stays wide-format for now (one doc per filing, a column per
-    // location) — not editable yet, only addable as a new org-wide filing.
+    // Yearly stays wide-format (one doc per filing, a column per
+    // location) — the 6-location checkbox matrix + Others field cover the
+    // same ground a per-location edit would.
     type = 'yearly'; cacheArr = yearly;
-    fields = { name: desc, act: document.getElementById('f-act').value.trim() || '–', due: dateVal, mode: document.getElementById('f-mode').value.trim() || '–', blr:'',coorg:'',kabini:'',hampi:'',ear:'',tl:'',others:'', dateObj, fiscalYear };
+    const prevYearly = isEdit ? findRow(type, currentEditId) : null;
+    // A checkbox only has two states, but a few rows (e.g. Factory License
+    // Renewal) use 'N/A' for genuinely-not-applicable locations — preserve
+    // that distinction rather than collapsing it to blank/✓.
+    const chk = (id, key) => (prevYearly && prevYearly[key] === 'N/A') ? 'N/A' : (document.getElementById(id)?.checked ? '✓' : '');
+    fields = {
+      name: desc, act: document.getElementById('f-act').value.trim() || '–', due: dateVal, mode: document.getElementById('f-mode').value.trim() || '–',
+      blr: chk('f-yr-blr','blr'), coorg: chk('f-yr-coorg','coorg'), kabini: chk('f-yr-kabini','kabini'), hampi: chk('f-yr-hampi','hampi'), ear: chk('f-yr-ear','ear'), tl: chk('f-yr-tl','tl'),
+      others: document.getElementById('f-yr-others').value.trim(), dateObj, fiscalYear
+    };
   } else {
     return;
   }

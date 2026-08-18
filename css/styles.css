@@ -447,6 +447,12 @@ tr.drag-over-row { box-shadow: inset 0 2px 0 var(--navy-vivid); }
 .form-input { border: 1px solid var(--warm-grey); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: 'Inter', sans-serif; width: 100%; transition: border-color 200ms ease, box-shadow 200ms ease; }
 .form-input:focus { outline: none; border-color: var(--navy-vivid); box-shadow: 0 0 0 3px rgba(60,92,231,0.18); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* Per-location "which sites have filed" checkbox matrix, used in the
+   Add/Edit modal for Half-Yearly ESIC and Yearly rows that stay wide-format
+   (one row per period/filing, a checkbox per location instead of a single
+   Location field). */
+.loc-checkbox-grid { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 10px; border: 1px solid var(--warm-grey); border-radius: 6px; }
+.loc-checkbox-grid label { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-main); cursor: pointer; }
 .modal-footer { padding: 16px 20px; border-top: 1px solid var(--warm-grey); display: flex; justify-content: flex-end; gap: 10px; }
 .btn-cancel { background: var(--warm-grey); color: var(--text-main); border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; transition: background 150ms ease; }
 .btn-cancel:hover { background: #CBD3EE; }

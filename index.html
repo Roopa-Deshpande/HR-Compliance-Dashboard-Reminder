@@ -411,6 +411,30 @@
         </div>
         <div class="form-group" id="f-reminder-row"><label>Reminder (days before)</label><input type="number" class="form-input" id="f-reminder" value="7" min="1" max="30"></div>
       </div>
+      <div class="form-group" id="f-esicloc-row" style="display:none">
+        <label>Filed at (check locations that have filed)</label>
+        <div class="loc-checkbox-grid">
+          <label><input type="checkbox" id="f-esic-blr"> BLR</label>
+          <label><input type="checkbox" id="f-esic-coorg"> Coorg</label>
+          <label><input type="checkbox" id="f-esic-kabini"> Kabini</label>
+          <label><input type="checkbox" id="f-esic-hampi"> Hampi</label>
+          <label><input type="checkbox" id="f-esic-eblr"> Earthitects BLR</label>
+          <label><input type="checkbox" id="f-esic-ewd"> Earthitects WD</label>
+          <label><input type="checkbox" id="f-esic-tl"> Terralife</label>
+        </div>
+      </div>
+      <div class="form-group" id="f-yearlyloc-row" style="display:none">
+        <label>Filed at (check locations that have filed)</label>
+        <div class="loc-checkbox-grid">
+          <label><input type="checkbox" id="f-yr-blr"> BLR</label>
+          <label><input type="checkbox" id="f-yr-coorg"> Coorg</label>
+          <label><input type="checkbox" id="f-yr-kabini"> Kabini</label>
+          <label><input type="checkbox" id="f-yr-hampi"> Hampi</label>
+          <label><input type="checkbox" id="f-yr-ear"> Earthitects</label>
+          <label><input type="checkbox" id="f-yr-tl"> Terralife</label>
+        </div>
+        <div class="form-group" style="margin-top:8px"><label>Others</label><input type="text" class="form-input" id="f-yr-others" placeholder="e.g., Elkhill ✓"></div>
+      </div>
       <div class="form-group"><label>Remarks / Notes</label><input type="text" class="form-input" id="f-notes" placeholder="Optional remarks"></div>
     </div>
     <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button><button class="btn-save" id="addModalSaveBtn" onclick="saveNewEntry()">Add Entry</button></div>
