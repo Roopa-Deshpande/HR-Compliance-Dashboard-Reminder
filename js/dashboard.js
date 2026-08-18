@@ -61,16 +61,18 @@ function statusPill(status, done) {
   return `<span class="status-pill status-upcoming"><span class="status-dot"></span>Upcoming</span>`;
 }
 // Shown next to the Done pill once a record has been completed via the
-// delay-confirmation checkbox flow (fields.completedDelayed). Records
-// marked done before this flow existed (or via a legacy proxy field) have
-// no completedDelayed value and simply show no badge.
+// completion-date flow (fields.completedDelayed). Records marked done
+// before this flow existed (or via a legacy proxy field) have no
+// completedDelayed value and simply show no badge.
 function onTimeLateBadge(row) {
   if (row.completedDelayed === undefined || row.completedDelayed === null) return '';
   const cd = toDate(row.completedDate);
   const dateStr = cd ? ` · ${fmtShort(cd)}` : '';
-  return row.completedDelayed
-    ? `<span class="status-pill ontime-badge late">⚠ Late${dateStr}</span>`
-    : `<span class="status-pill ontime-badge on-time">✓ On Time${dateStr}</span>`;
+  if (row.completedDelayed) {
+    const title = row.delayReason ? ` title="Reason: ${esc(row.delayReason)}"` : '';
+    return `<span class="status-pill ontime-badge late"${title}>⚠ Late${dateStr}</span>`;
+  }
+  return `<span class="status-pill ontime-badge on-time">✓ On Time${dateStr}</span>`;
 }
 function catBadge(cat) {
   const map = { PF:'cat-pf', ESI:'cat-esi', PT:'cat-pt', LWF:'cat-lwf', Bonus:'cat-bonus', Gratuity:'cat-grat', SE:'cat-se', CLRA:'cat-clra' };
@@ -83,6 +85,13 @@ function delBtnHtml(id, type, summary) {
 }
 function editBtnHtml(id, type) {
   return `<button class="edit-btn" onclick="appEditRecord('${id}','${type}')" title="Edit">✏️</button>`;
+}
+// Replaces the old plain checkbox. Pending → opens the completion-date
+// modal. Done → dimmed/full-color toggle, click offers to undo.
+function markCompleteBtnHtml(id, type, summary, dueMs, done) {
+  const due = dueMs !== null && dueMs !== undefined ? dueMs : 'null';
+  const title = done ? 'Completed — click to undo' : 'Mark complete';
+  return `<button class="mark-complete-btn${done?' done':''}" onclick="appToggleComplete('${id}','${type}',${JSON.stringify(summary)},${due},${done})" title="${title}">✅</button>`;
 }
 function stripId(r) { const { id, ...rest } = r; return rest; }
 
@@ -330,20 +339,20 @@ function renderMonthlyTable(mIdx) {
   const draggable = getSortMode('monthly') === 'custom';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">No compliance items for this month / filter${monthly.some(d=>d.fiscalYear===activeFiscalYear) ? '' : ' — nothing imported for ' + fyLabel(activeFiscalYear) + ' yet'}.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No compliance items for this month / filter${monthly.some(d=>d.fiscalYear===activeFiscalYear) ? '' : ' — nothing imported for ' + fyLabel(activeFiscalYear) + ' yet'}.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(item => {
     const status = getStatus(item.date);
+    const dueMs = item.date ? item.date.getTime() : null;
     return `<tr data-record-id="${item.id}" draggable="${draggable}" style="${item.done?'opacity:0.5':''}">
       <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
-      <td><input type="checkbox" class="done-check" ${item.done?'checked':''} onchange="appConfirmCheck('${item.id}','monthly',this,${JSON.stringify(item.desc)},${item.date ? item.date.getTime() : 'null'})" title="Mark done"></td>
       <td class="date-cell">${fmt(item.date)}</td>
       <td class="desc-cell">${esc(item.desc)}${item.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${esc(item.notes)}</span>` : ''}</td>
       <td>${catBadge(item.cat)}</td>
       <td><span class="location-tag">${esc(item.loc)||'–'}</span></td>
       <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, item.done)}${onTimeLateBadge(item)}</td>
-      <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(item.id,'monthly')}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
+      <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(item.id,'monthly')}${markCompleteBtnHtml(item.id,'monthly',item.desc,dueMs,item.done)}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
     </tr>`;
   }).join('');
 }
@@ -413,7 +422,7 @@ function renderQuarterlyTable() {
         <td class="date-cell">${fmt(row.due)}</td>
         <td>${row.submitted ? `<span style="color:var(--upcoming);font-weight:600">${esc(row.submitted)}</span>` : '<em style="color:#9ca3af">Pending</em>'}</td>
         <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${done ? statusPill('done',true) : statusPill(status,false)}${onTimeLateBadge(row)}</td>
-        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','quarterly',this,${JSON.stringify(period)},${row.due ? row.due.getTime() : 'null'})">${editBtnHtml(row.id,'quarterly')}${delBtnHtml(row.id,'quarterly', period)}</td>
+        <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(row.id,'quarterly')}${markCompleteBtnHtml(row.id,'quarterly',period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'quarterly', period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="8"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -430,7 +439,7 @@ function renderQuarterlyTable() {
         <td style="font-size:12px">${esc(row.contractors)||'–'}</td>
         <td>${esc(row.period)||'–'}</td>
         <td class="date-cell">${fmt(row.due)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${row.done?'checked':''} onchange="appConfirmCheck('${row.id}','clra',this,${JSON.stringify(row.period||row.loc)},${row.due ? row.due.getTime() : 'null'})">${statusPill(status, row.done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'clra')}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, row.done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'clra')}${markCompleteBtnHtml(row.id,'clra',row.period||row.loc,row.due?row.due.getTime():null,row.done)}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="7"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -464,7 +473,7 @@ function renderHalfYearlyTables() {
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
         <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
         <td>${doneClass(row.hampi)}</td><td>${doneClass(row.eblr)}</td><td>${doneClass(row.ewd)}</td><td>${doneClass(row.tl)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_esic',this,${JSON.stringify(row.period)},${row.due ? row.due.getTime() : 'null'})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_esic')}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_esic')}${markCompleteBtnHtml(row.id,'halfyearly_esic',row.period,row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="12"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -481,7 +490,7 @@ function renderHalfYearlyTables() {
       return `<tr data-record-id="${row.id}" draggable="${draggable}">
         <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
-        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_pt',this,${JSON.stringify((row.period||'')+' – '+(row.loc||''))},${row.due ? row.due.getTime() : 'null'})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_pt')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_pt')}${markCompleteBtnHtml(row.id,'halfyearly_pt',(row.period||'')+' – '+(row.loc||''),row.due?row.due.getTime():null,done)}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="6"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -519,7 +528,7 @@ function renderYearlyTable() {
       <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
       <td>${doneClass(row.hampi)}</td><td>${doneClass(row.ear)}</td><td>${doneClass(row.tl)}</td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.others)||'–'}</td>
-      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','yearly',this,${JSON.stringify(row.name)},${row.dateObj ? row.dateObj.getTime() : 'null'})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'yearly')}${delBtnHtml(row.id,'yearly', row.name)}</td>
+      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'yearly')}${markCompleteBtnHtml(row.id,'yearly',row.name,row.dateObj?row.dateObj.getTime():null,done)}${delBtnHtml(row.id,'yearly', row.name)}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="14"><div class="empty-state">No entries yet.</div></td></tr>`;
 }
@@ -890,39 +899,44 @@ export function editRecord(id, type) {
 }
 
 // ═══════════════════════════════════════════
-// COMPLETION CHECKBOX — checking a box always asks for the actual
-// completion date; On Time vs Late is derived automatically by comparing
-// that date to the record's due date (not a separate self-reported
-// choice). Late completions get flagged for an escalation email (picked
-// up by the next daily reminder run). Unchecking (marking not-done) is
-// always a direct toggle, no prompt.
+// MARK COMPLETE — clicking the ✅ icon on a pending row always asks for
+// the actual completion date (and a reason, if it's late); On Time vs
+// Late is derived automatically by comparing that date to the record's
+// due date, not a separate self-reported choice. Late completions get
+// flagged for an escalation email (picked up by the next daily reminder
+// run). Clicking ✅ on an already-done row offers to undo — a direct
+// toggle back to pending, no prompt beyond the confirm.
 // ═══════════════════════════════════════════
-let pendingCompletion = null; // { id, type, cb, summary, due }
+let pendingCompletion = null; // { id, type, summary, due }
 
-export async function promptCompletion(id, type, cb, summary, dueMs) {
-  if (!cb.checked) {
+export async function toggleComplete(id, type, summary, dueMs, isDone) {
+  if (isDone) {
+    if (!confirm(`Mark "${summary}" as not completed?`)) return;
     // doneTouched: a few Half-Yearly ESIC / Yearly rows carry old
     // per-location ✓ marks that render.js treats as an implicit "done"
-    // signal for rows never explicitly (un)checked via this flow. Without
-    // this flag, unchecking one of those rows would render checked again
-    // on the very next refresh — the legacy marks are still there and
-    // would keep winning. Once a row's been explicitly touched, the real
-    // `done` flag always wins from then on.
-    const extra = { doneTouched: true };
+    // signal for rows never explicitly (un)marked via this flow. Without
+    // this flag, undoing one of those rows would render done again on the
+    // very next refresh — the legacy marks are still there and would keep
+    // winning. Once a row's been explicitly touched, the real `done` flag
+    // always wins from then on.
+    const extra = { doneTouched: true, delayReason: '' };
     if (type === 'quarterly') extra.submitted = '';
     if (type === 'halfyearly_pt') extra.status = '';
     try { await toggleRecordDone(id, type, {}, false, summary, extra); }
-    catch (e) { alert('Could not update: ' + e.message); cb.checked = true; }
+    catch (e) { alert('Could not update: ' + e.message); }
     return;
   }
   const due = dueMs ? new Date(dueMs) : null;
-  pendingCompletion = { id, type, cb, summary, due };
+  pendingCompletion = { id, type, summary, due };
   const summaryEl = document.getElementById('delayModalSummary');
   if (summaryEl) summaryEl.textContent = summary || '';
   const dueEl = document.getElementById('delayModalDue');
   if (dueEl) dueEl.textContent = due ? `Due date: ${fmt(due)}` : '';
   const dateInput = document.getElementById('f-delay-date');
   if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+  const reasonInput = document.getElementById('f-delay-reason');
+  if (reasonInput) reasonInput.value = '';
+  updateDelayReasonVisibility();
   document.getElementById('delayModal').classList.add('show');
 }
 
@@ -937,14 +951,30 @@ function isLate(completedDate, due) {
   return c > d;
 }
 
+// Shows/hides the Reason for Delay field live as the user picks a date,
+// based on whether *that* date would be late — so it's never hidden
+// behind an extra step, but also never demanded for an on-time date.
+function updateDelayReasonVisibility() {
+  const dateVal = document.getElementById('f-delay-date')?.value;
+  const late = pendingCompletion && dateVal ? isLate(new Date(dateVal), pendingCompletion.due) : false;
+  const row = document.getElementById('delayReasonRow');
+  if (row) row.style.display = late ? '' : 'none';
+}
+document.getElementById('f-delay-date')?.addEventListener('change', updateDelayReasonVisibility);
+
 export async function confirmCompletion() {
   if (!pendingCompletion) return;
-  const { id, type, cb, summary, due } = pendingCompletion;
+  const { id, type, summary, due } = pendingCompletion;
   const dateVal = document.getElementById('f-delay-date').value;
   if (!dateVal) { alert('Please enter the completion date.'); return; }
   const completedDate = new Date(dateVal);
   const delayed = isLate(completedDate, due);
-  const extra = { completedDelayed: delayed, completedDate, doneTouched: true };
+  let delayReason = '';
+  if (delayed) {
+    delayReason = document.getElementById('f-delay-reason').value.trim();
+    if (!delayReason) { alert('Please enter a reason for the delay.'); return; }
+  }
+  const extra = { completedDelayed: delayed, completedDate, delayReason, doneTouched: true };
   if (delayed) extra.escalationPending = true;
   if (type === 'quarterly') extra.submitted = fmtShort(completedDate);
   if (type === 'halfyearly_pt') extra.status = 'Done';
@@ -952,11 +982,11 @@ export async function confirmCompletion() {
     await toggleRecordDone(id, type, {}, true, summary, extra);
     closeModal('delayModal');
     pendingCompletion = null;
-  } catch (e) { alert('Could not update: ' + e.message); cb.checked = false; }
+  } catch (e) { alert('Could not update: ' + e.message); }
 }
 
 export function cancelCompletion() {
-  if (pendingCompletion) { pendingCompletion.cb.checked = false; pendingCompletion = null; }
+  pendingCompletion = null;
   closeModal('delayModal');
 }
 

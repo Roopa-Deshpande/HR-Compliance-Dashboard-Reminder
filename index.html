@@ -155,7 +155,7 @@
 
   <div class="compliance-table-wrap">
     <table class="compliance-table">
-      <thead><tr><th style="width:20px"></th><th style="width:32px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:80px"></th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th style="width:110px">Due Date</th><th>Compliance Activity</th><th style="width:120px">Category</th><th style="width:120px">Location</th><th style="width:110px">Status</th><th style="width:110px"></th></tr></thead>
       <tbody id="complianceTbody"></tbody>
     </table>
   </div>
@@ -481,9 +481,10 @@
   </div>
 </div>
 
-<!-- COMPLETION-DATE MODAL (shown when checking a done-checkbox) — On
-     Time / Late is computed automatically from this date vs the due date,
-     not a separate self-reported choice. -->
+<!-- COMPLETION-DATE MODAL (shown when clicking the ✅ Mark Complete icon
+     on a pending row) — On Time / Late is computed automatically from this
+     date vs the due date, not a separate self-reported choice. Reason for
+     Delay only appears once the entered date would actually be late. -->
 <div class="modal-overlay" id="delayModal">
   <div class="modal" style="max-width:380px">
     <div class="modal-header"><h3>Mark as Complete</h3><button class="modal-close" onclick="appCancelCompletion()">×</button></div>
@@ -493,6 +494,10 @@
       <div class="form-group">
         <label>Date of Completion *</label>
         <input type="date" class="form-input" id="f-delay-date">
+      </div>
+      <div class="form-group" id="delayReasonRow" style="display:none;margin-top:12px">
+        <label>Reason for Delay *</label>
+        <input type="text" class="form-input" id="f-delay-reason" placeholder="e.g., Awaiting documents from vendor">
       </div>
     </div>
     <div class="modal-footer">

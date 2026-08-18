@@ -298,6 +298,12 @@ tr.search-highlight td { animation: searchHighlightFade 2s ease-out; }
 .del-btn:hover { color: var(--overdue); background: var(--gratuity-bg); }
 .edit-btn { background: none; border: none; color: #B7BFDC; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; transition: color 150ms ease, background 150ms ease; }
 .edit-btn:hover { color: var(--navy-vivid); background: var(--pf-bg); }
+/* Replaces the old plain checkbox — dimmed when pending, full-color once
+   done (click either state to toggle, with a confirm on undo). */
+.mark-complete-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; opacity: 0.4; filter: grayscale(1); transition: opacity 150ms ease, filter 150ms ease, background 150ms ease; }
+.mark-complete-btn:hover { opacity: 0.75; background: var(--esi-bg); }
+.mark-complete-btn.done { opacity: 1; filter: none; }
+.mark-complete-btn.done:hover { background: var(--esi-bg); }
 .save-btn { background: linear-gradient(120deg, #12E29B, var(--upcoming)); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 700; transition: filter 150ms ease; }
 .save-btn:hover { filter: brightness(1.08); }
 
