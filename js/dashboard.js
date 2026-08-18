@@ -60,6 +60,18 @@ function statusPill(status, done) {
   if (status === 'due-soon') return `<span class="status-pill status-due-soon"><span class="status-dot"></span>Due Soon</span>`;
   return `<span class="status-pill status-upcoming"><span class="status-dot"></span>Upcoming</span>`;
 }
+// Shown next to the Done pill once a record has been completed via the
+// delay-confirmation checkbox flow (fields.completedDelayed). Records
+// marked done before this flow existed (or via a legacy proxy field) have
+// no completedDelayed value and simply show no badge.
+function onTimeLateBadge(row) {
+  if (row.completedDelayed === undefined || row.completedDelayed === null) return '';
+  const cd = toDate(row.completedDate);
+  const title = cd ? ` title="Completed ${fmt(cd)}"` : '';
+  return row.completedDelayed
+    ? `<span class="status-pill ontime-badge late"${title}>⚠ Late</span>`
+    : `<span class="status-pill ontime-badge on-time"${title}>✓ On Time</span>`;
+}
 function catBadge(cat) {
   const map = { PF:'cat-pf', ESI:'cat-esi', PT:'cat-pt', LWF:'cat-lwf', Bonus:'cat-bonus', Gratuity:'cat-grat', SE:'cat-se', CLRA:'cat-clra' };
   const lbl = { PF:'Provident Fund', ESI:'ESI', PT:'Prof. Tax', LWF:'Labour WF', Bonus:'Bonus', Gratuity:'Gratuity', SE:'S&E', CLRA:'CLRA' };
@@ -96,8 +108,7 @@ function applySortMode(rows, section, dateField) {
   return arr.sort((a,b) => (a[dateField]?.getTime() ?? 0) - (b[dateField]?.getTime() ?? 0));
 }
 function initSortSelects() {
-  // esic/yearly are deferred (still wide-format, not reorderable yet).
-  ['monthly','quarterly','clra','pt','licenses'].forEach(section => {
+  ['monthly','quarterly','clra','esic','pt','yearly','licenses'].forEach(section => {
     const sel = document.getElementById('sort-' + section);
     if (sel) sel.value = getSortMode(section);
   });
@@ -242,9 +253,9 @@ export function initDashboard() {
   enableRowDragReorder('complianceTbody', 'monthly');
   enableRowDragReorder('quarterlyTbody', 'quarterly');
   enableRowDragReorder('clraTbody', 'clra');
+  enableRowDragReorder('halfYearlyEsicTbody', 'halfyearly_esic');
   enableRowDragReorder('halfYearlyPtTbody', 'halfyearly_pt');
-  // halfYearlyEsicTbody / yearlyTbody: not wired — still wide-format,
-  // deferred alongside the long-format migration.
+  enableRowDragReorder('yearlyTbody', 'yearly');
   enableLicenseDragReorder();
 
   return unsubs;
@@ -331,7 +342,7 @@ function renderMonthlyTable(mIdx) {
       <td class="desc-cell">${esc(item.desc)}${item.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${esc(item.notes)}</span>` : ''}</td>
       <td>${catBadge(item.cat)}</td>
       <td><span class="location-tag">${esc(item.loc)||'–'}</span></td>
-      <td>${statusPill(status, item.done)}</td>
+      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusPill(status, item.done)}${onTimeLateBadge(item)}</td>
       <td style="display:flex;gap:4px;align-items:center">${editBtnHtml(item.id,'monthly')}${delBtnHtml(item.id, 'monthly', item.desc)}</td>
     </tr>`;
   }).join('');
@@ -401,7 +412,7 @@ function renderQuarterlyTable() {
         <td>${esc(period)}</td>
         <td class="date-cell">${fmt(row.due)}</td>
         <td>${row.submitted ? `<span style="color:var(--upcoming);font-weight:600">${esc(row.submitted)}</span>` : '<em style="color:#9ca3af">Pending</em>'}</td>
-        <td>${done ? statusPill('done',true) : statusPill(status,false)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${done ? statusPill('done',true) : statusPill(status,false)}${onTimeLateBadge(row)}</td>
         <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','quarterly',this,${JSON.stringify(period)})">${editBtnHtml(row.id,'quarterly')}${delBtnHtml(row.id,'quarterly', period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="8"><div class="empty-state">No entries yet.</div></td></tr>`;
@@ -419,33 +430,43 @@ function renderQuarterlyTable() {
         <td style="font-size:12px">${esc(row.contractors)||'–'}</td>
         <td>${esc(row.period)||'–'}</td>
         <td class="date-cell">${fmt(row.due)}</td>
-        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${row.done?'checked':''} onchange="appConfirmCheck('${row.id}','clra',this,${JSON.stringify(row.period||row.loc)})">${statusPill(status, row.done)}${editBtnHtml(row.id,'clra')}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${row.done?'checked':''} onchange="appConfirmCheck('${row.id}','clra',this,${JSON.stringify(row.period||row.loc)})">${statusPill(status, row.done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'clra')}${delBtnHtml(row.id,'clra', row.period||row.loc)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="7"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
 }
 
 // ═══════════════════════════════════════════
-// HALF-YEARLY — both ESIC and PT use the same one-row-per-location shape
-// { period, due, loc, status }.
+// HALF-YEARLY — PT is long-format ({ period, due, loc, status }). ESIC
+// stays in the original wide format (one row per period, a column per
+// location) — a long-format rewrite was prepared and deferred, see
+// scripts/migrate-longformat.js. It's still fully reorderable and now has
+// its own single per-row completion checkbox (marking "this whole
+// six-month filing period is done"), same as every other sheet.
 // ═══════════════════════════════════════════
 function renderHalfYearlyTables() {
-  // ESIC stays in the original wide format (one row per period, a column
-  // per location) — matching what's still live in Firestore. Not yet
-  // editable/reorderable; that upgrade is deferred alongside the
-  // long-format data migration (see scripts/migrate-longformat.js).
   const esicTbody = document.getElementById('halfYearlyEsicTbody');
   if (esicTbody) {
+    const draggable = getSortMode('esic') === 'custom';
+    const rows = applySortMode(hyEsic.filter(r => r.fiscalYear === activeFiscalYear), 'esic', 'due');
     const doneClass = v => v === 'Done' ? `<span style="color:var(--upcoming);font-weight:600">✓</span>` : `<span style="color:#d1d5db">–</span>`;
-    esicTbody.innerHTML = hyEsic.filter(r => r.fiscalYear === activeFiscalYear).map((row, i) => {
+    esicTbody.innerHTML = rows.map((row, i) => {
       const status = getStatus(row.due);
-      return `<tr data-record-id="${row.id}">
+      // Backward-compatible: periods already fully filed under the old
+      // per-location columns (before this checkbox existed) show as Done
+      // via that legacy signal until someone explicitly (un)checks them —
+      // otherwise real completed FY2025-26 filings would wrongly flip to
+      // "Pending" the moment this shipped. Once touched, the real `done`
+      // flag always wins (see doneTouched in promptCompletion).
+      const done = row.doneTouched ? !!row.done : (!!row.done || row.blr === 'Done');
+      return `<tr data-record-id="${row.id}" draggable="${draggable}">
+        <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td>
         <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
         <td>${doneClass(row.hampi)}</td><td>${doneClass(row.eblr)}</td><td>${doneClass(row.ewd)}</td><td>${doneClass(row.tl)}</td>
-        <td style="display:flex;gap:4px;align-items:center">${statusPill(status, row.blr === 'Done')}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_esic',this,${JSON.stringify(row.period)})">${statusPill(status, done)}${onTimeLateBadge(row)}${delBtnHtml(row.id,'halfyearly_esic', row.period)}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="11"><div class="empty-state">No entries yet.</div></td></tr>`;
+    }).join('') || `<tr><td colspan="12"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
   // PT was already long-format before this round of changes, so it keeps
   // every new feature (edit, delay-checkbox, drag-reorder) same as
@@ -460,7 +481,7 @@ function renderHalfYearlyTables() {
       return `<tr data-record-id="${row.id}" draggable="${draggable}">
         <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
         <td>${i+1}</td><td>${esc(row.period)}</td><td class="date-cell">${fmt(row.due)}</td><td class="loc">${esc(row.loc)}</td>
-        <td style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_pt',this,${JSON.stringify((row.period||'')+' – '+(row.loc||''))})">${statusPill(status, done)}${editBtnHtml(row.id,'halfyearly_pt')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
+        <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','halfyearly_pt',this,${JSON.stringify((row.period||'')+' – '+(row.loc||''))})">${statusPill(status, done)}${onTimeLateBadge(row)}${editBtnHtml(row.id,'halfyearly_pt')}${delBtnHtml(row.id,'halfyearly_pt', row.period)}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="6"><div class="empty-state">No entries yet.</div></td></tr>`;
   }
@@ -469,16 +490,27 @@ function renderHalfYearlyTables() {
 // ═══════════════════════════════════════════
 // YEARLY — stays in the original wide format (one row per filing type, a
 // column per location) — matching what's still live in Firestore. Not yet
-// editable/reorderable; deferred alongside the long-format data migration
-// (see scripts/migrate-longformat.js).
+// editable field-by-field, but fully reorderable and now has its own
+// single per-row completion checkbox ("this filing is done"), same as
+// every other sheet.
 // ═══════════════════════════════════════════
 function renderYearlyTable() {
   const tbody = document.getElementById('yearlyTbody');
   if (!tbody) return;
-  tbody.innerHTML = yearly.filter(r => r.fiscalYear === activeFiscalYear).map((row,i) => {
+  const draggable = getSortMode('yearly') === 'custom';
+  const rows = applySortMode(yearly.filter(r => r.fiscalYear === activeFiscalYear), 'yearly', 'dateObj');
+  tbody.innerHTML = rows.map((row,i) => {
     const status = row.dateObj ? getStatus(row.dateObj) : 'upcoming';
     const doneClass = v => v === '✓' ? `<span style="color:var(--upcoming);font-weight:700">✓</span>` : `<span style="color:#d1d5db;font-size:11px">${esc(v)||'–'}</span>`;
-    return `<tr data-record-id="${row.id}">
+    // Backward-compatible: a few filings (e.g. CLRA Annual Return, Factory
+    // License Renewal) already carry ✓ marks in their old per-location
+    // columns — treat that as historically done too, so the new checkbox
+    // doesn't show unchecked next to a row that visibly has ✓'s in it.
+    // Once touched, the real `done` flag always wins (see doneTouched in
+    // promptCompletion).
+    const done = row.doneTouched ? !!row.done : (!!row.done || [row.blr,row.coorg,row.kabini,row.hampi,row.ear,row.tl].includes('✓'));
+    return `<tr data-record-id="${row.id}" draggable="${draggable}">
+      <td class="drag-handle-cell ${draggable?'':'disabled'}">⠿</td>
       <td>${i+1}</td>
       <td><strong style="font-size:13px">${esc(row.name)}</strong></td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.act)||'–'}</td>
@@ -487,9 +519,9 @@ function renderYearlyTable() {
       <td>${doneClass(row.blr)}</td><td>${doneClass(row.coorg)}</td><td>${doneClass(row.kabini)}</td>
       <td>${doneClass(row.hampi)}</td><td>${doneClass(row.ear)}</td><td>${doneClass(row.tl)}</td>
       <td style="font-size:11px;color:var(--text-muted)">${esc(row.others)||'–'}</td>
-      <td style="display:flex;gap:4px;align-items:center">${statusPill(status, row.done)}${delBtnHtml(row.id,'yearly', row.name)}</td>
+      <td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="checkbox" class="done-check" ${done?'checked':''} onchange="appConfirmCheck('${row.id}','yearly',this,${JSON.stringify(row.name)})">${statusPill(status, done)}${onTimeLateBadge(row)}${delBtnHtml(row.id,'yearly', row.name)}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="13"><div class="empty-state">No entries yet.</div></td></tr>`;
+  }).join('') || `<tr><td colspan="14"><div class="empty-state">No entries yet.</div></td></tr>`;
 }
 
 // ═══════════════════════════════════════════
@@ -586,13 +618,13 @@ function renderLicenses() {
 // ═══════════════════════════════════════════
 const TYPE_TO_SECTION = { monthly:'monthly', quarterly:'quarterly', clra:'quarterly', halfyearly_esic:'halfyearly', halfyearly_pt:'halfyearly', yearly:'yearly' };
 const TYPE_TO_SUBTYPE = { quarterly:'er1', clra:'clra', halfyearly_esic:'esic', halfyearly_pt:'pt' };
-// esic/yearly deliberately omitted — deferred alongside the long-format
-// migration, no sort-mode control exists for them right now.
 const RENDER_BY_SECTION = {
   monthly: () => renderMonthlyTable(activeMonthIdx),
   quarterly: renderQuarterlyTable,
   clra: renderQuarterlyTable,
+  esic: renderHalfYearlyTables,
   pt: renderHalfYearlyTables,
+  yearly: renderYearlyTable,
   licenses: renderLicenses,
 };
 
@@ -820,9 +852,16 @@ let pendingCompletion = null; // { id, type, cb, summary }
 
 export async function promptCompletion(id, type, cb, summary) {
   if (!cb.checked) {
-    const extra = {};
+    // doneTouched: a few Half-Yearly ESIC / Yearly rows carry old
+    // per-location ✓ marks that render.js treats as an implicit "done"
+    // signal for rows never explicitly (un)checked via this flow. Without
+    // this flag, unchecking one of those rows would render checked again
+    // on the very next refresh — the legacy marks are still there and
+    // would keep winning. Once a row's been explicitly touched, the real
+    // `done` flag always wins from then on.
+    const extra = { doneTouched: true };
     if (type === 'quarterly') extra.submitted = '';
-    if (type === 'halfyearly_esic' || type === 'halfyearly_pt') extra.status = '';
+    if (type === 'halfyearly_pt') extra.status = '';
     try { await toggleRecordDone(id, type, {}, false, summary, extra); }
     catch (e) { alert('Could not update: ' + e.message); cb.checked = true; }
     return;
@@ -857,10 +896,10 @@ export async function confirmCompletion(delayed) {
     if (!dateVal) { alert('Please enter the actual completion date.'); return; }
     completedDate = new Date(dateVal);
   }
-  const extra = { completedDelayed: delayed, completedDate };
+  const extra = { completedDelayed: delayed, completedDate, doneTouched: true };
   if (delayed) extra.escalationPending = true;
   if (type === 'quarterly') extra.submitted = fmtShort(completedDate);
-  if (type === 'halfyearly_esic' || type === 'halfyearly_pt') extra.status = 'Done';
+  if (type === 'halfyearly_pt') extra.status = 'Done';
   try {
     await toggleRecordDone(id, type, {}, true, summary, extra);
     closeModal('delayModal');

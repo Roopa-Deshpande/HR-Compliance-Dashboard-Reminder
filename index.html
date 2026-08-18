@@ -226,9 +226,12 @@
     <button class="add-row-btn" onclick="openAddModal('halfyearly')">＋ Add Entry</button>
   </div>
   <div class="period-section">
-    <div class="period-section-header"><h4>ESIC Half-Yearly Returns</h4><span class="cat-badge cat-esi" style="font-size:11px">ESIC</span></div>
+    <div class="period-section-header"><h4>ESIC Half-Yearly Returns</h4>
+      <div style="display:flex;gap:8px;align-items:center"><span class="cat-badge cat-esi" style="font-size:11px">ESIC</span>
+      <select class="sort-select" id="sort-esic" onchange="appSetSortMode('esic',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select></div>
+    </div>
     <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Period</th><th>Due Date</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects BLR</th><th>Earthitects WD</th><th>Terralife</th><th>Status</th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th>#</th><th>Period</th><th>Due Date</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects BLR</th><th>Earthitects WD</th><th>Terralife</th><th>Status</th></tr></thead>
       <tbody id="halfYearlyEsicTbody"></tbody>
     </table></div>
   </div>
@@ -260,9 +263,11 @@
     <button class="add-row-btn" onclick="openAddModal('yearly')">＋ Add Entry</button>
   </div>
   <div class="period-section">
-    <div class="period-section-header"><h4>Annual Returns Tracker – All Locations</h4></div>
+    <div class="period-section-header"><h4>Annual Returns Tracker – All Locations</h4>
+      <select class="sort-select" id="sort-yearly" onchange="appSetSortMode('yearly',this.value)"><option value="date">Sort: Due Date</option><option value="custom">Sort: Custom Order</option></select>
+    </div>
     <div class="period-table-wrap"><table class="period-table">
-      <thead><tr><th>#</th><th>Return / Filing</th><th>Act / Authority</th><th>Due Date</th><th>Mode</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects</th><th>Terralife</th><th>Others</th><th>Status</th></tr></thead>
+      <thead><tr><th style="width:20px"></th><th>#</th><th>Return / Filing</th><th>Act / Authority</th><th>Due Date</th><th>Mode</th><th>BLR</th><th>Coorg</th><th>Kabini</th><th>Hampi</th><th>Earthitects</th><th>Terralife</th><th>Others</th><th>Status</th></tr></thead>
       <tbody id="yearlyTbody"></tbody>
     </table></div>
   </div>
