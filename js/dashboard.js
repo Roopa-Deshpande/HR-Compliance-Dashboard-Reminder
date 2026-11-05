@@ -22,6 +22,8 @@ let activeMonthIdx = new Date().getMonth();
 let activeCatFilter = 'all';
 let activeLocFilter = 'all';
 let activeLicFilter = 'all';
+let activeLicLocFilter = 'all';
+let customLocations = []; // locations added manually ('location' records)
 let currentAddSection = 'monthly';
 let currentEditId = null;
 let currentEditType = null;
@@ -80,8 +82,17 @@ function catBadge(cat) {
   return `<span class="cat-badge ${map[cat]||'cat-se'}">${lbl[cat]||cat}</span>`;
 }
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Safe body for a single-quoted JS string literal that sits inside a
+// double-quoted inline handler (onclick="fn('…')"): JS-escape first
+// (backslash, apostrophe, newlines), then HTML-escape. Escaping only the
+// HTML layer isn't enough — the browser decodes &#39; back to ' before the
+// JS is parsed, which would end the string early on any name containing an
+// apostrophe.
+function jsStr(s) {
+  return esc((s ?? '').toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n]+/g, ' '));
+}
 function delBtnHtml(id, type, summary) {
-  return `<button class="del-btn" onclick="appDeleteRecord('${id}','${type}','${esc(summary).replace(/'/g,"\\'")}')" title="Delete">🗑</button>`;
+  return `<button class="del-btn" onclick="appDeleteRecord('${id}','${type}','${jsStr(summary)}')" title="Delete">🗑</button>`;
 }
 function editBtnHtml(id, type) {
   return `<button class="edit-btn" onclick="appEditRecord('${id}','${type}')" title="Edit">✏️</button>`;
@@ -91,7 +102,7 @@ function editBtnHtml(id, type) {
 function markCompleteBtnHtml(id, type, summary, dueMs, done) {
   const due = dueMs !== null && dueMs !== undefined ? dueMs : 'null';
   const title = done ? 'Completed — click to undo' : 'Mark complete';
-  return `<button class="mark-complete-btn${done?' done':''}" onclick="appToggleComplete('${id}','${type}','${esc(summary).replace(/'/g,"\\'")}',${due},${done})" title="${title}">✅</button>`;
+  return `<button class="mark-complete-btn${done?' done':''}" onclick="appToggleComplete('${id}','${type}','${jsStr(summary)}',${due},${done})" title="${title}">✅</button>`;
 }
 function stripId(r) { const { id, ...rest } = r; return rest; }
 
@@ -252,6 +263,9 @@ export function initDashboard() {
     yearly = rows.map(r => { const dateObj = toDate(r.fields.dateObj); return { id: r.id, done: r.done, ...r.fields, dateObj, fiscalYear: r.fields.fiscalYear || computeFiscalYear(dateObj) }; });
     renderYearlyTable();
   }));
+  unsubs.push(subscribeRecords('location', rows => {
+    customLocations = rows.map(r => ({ id: r.id, name: cleanLoc(r.fields && r.fields.name) })).filter(l => l.name);
+  }));
   unsubs.push(subscribeRecords('license', rows => {
     licenses = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, expiry: toDate(r.fields.expiry) }));
     renderLicenses();
@@ -316,7 +330,7 @@ function buildLocFilter() {
   let html = '<span class="loc-filter-label">Location:</span>';
   allLocs.forEach(l => {
     const lbl = l === 'all' ? 'All' : l;
-    html += `<button class="filter-btn ${l===activeLocFilter?'active':''}" onclick="appFilterLoc('${l}',this)">${lbl}</button>`;
+    html += `<button class="filter-btn ${l===activeLocFilter?'active':''}" onclick="appFilterLoc('${jsStr(l)}',this)">${esc(lbl)}</button>`;
   });
   wrap.innerHTML = html;
 }
@@ -545,6 +559,78 @@ function renderYearlyTable() {
 }
 
 // ═══════════════════════════════════════════
+// LOCATIONS — the fixed defaults baked into the dropdowns in index.html,
+// plus any added manually via "＋ Add new location…" in the license form
+// (stored as 'location' records, so they persist and sync to everyone).
+// Dropdowns are rebuilt from this combined list whenever a form opens, so
+// a new location shows up everywhere without any code change.
+// ═══════════════════════════════════════════
+const NEW_LOC_VALUE = '__new__';
+function cleanLoc(s) { return (s ?? '').toString().replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60); }
+function normLoc(s) { return cleanLoc(s).toLowerCase(); }
+
+// The static options from index.html, captured once before anything
+// rewrites them (selectId -> [{value, label}]).
+const locBase = {};
+['f-loc', 'lf-loc'].forEach(id => {
+  const sel = document.getElementById(id);
+  if (sel) locBase[id] = Array.from(sel.options).map(o => ({ value: o.value, label: o.textContent }));
+});
+
+function populateLocationSelect(selectId, { withLicenseLocs = false, allowNew = false } = {}) {
+  const sel = document.getElementById(selectId);
+  if (!sel || !locBase[selectId]) return;
+  const keep = sel.value;
+  const known = new Set(locBase[selectId].flatMap(o => [normLoc(o.value), normLoc(o.label)]));
+  const extras = [];
+  const consider = (name) => {
+    const n = cleanLoc(name), k = normLoc(n);
+    if (!n || known.has(k)) return;
+    known.add(k); extras.push(n);
+  };
+  customLocations.forEach(l => consider(l.name));
+  // Existing licenses may already use locations that aren't in the static
+  // list (e.g. Hassan, Richmond Road) — include them so editing such a
+  // license doesn't blank out its location.
+  if (withLicenseLocs) licenses.forEach(l => consider(l.loc));
+  extras.sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '';
+  locBase[selectId].forEach(o => sel.add(new Option(o.label, o.value)));
+  extras.forEach(n => sel.add(new Option(n, n)));
+  if (allowNew) sel.add(new Option('＋ Add new location…', NEW_LOC_VALUE));
+  if (keep && Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
+}
+
+// Returns the canonical spelling to store for a typed location name,
+// creating a persisted 'location' record only if it's genuinely new
+// (case-insensitive match against everything already known, including the
+// static dropdown labels, so "bangalore (blr)" doesn't spawn a duplicate).
+async function ensureLocation(name) {
+  const n = cleanLoc(name), want = normLoc(n);
+  for (const opts of Object.values(locBase)) {
+    const hit = opts.find(o => normLoc(o.value) === want || normLoc(o.label) === want);
+    if (hit) return hit.value;
+  }
+  const existing = [...customLocations.map(l => l.name), ...licenses.map(l => l.loc)].find(v => normLoc(v) === want);
+  if (existing) return cleanLoc(existing);
+  await addRecord('location', { name: n }, n);
+  customLocations.push({ id: null, name: n });
+  return n;
+}
+
+function syncNewLocInput() {
+  const sel = document.getElementById('lf-loc'), inp = document.getElementById('lf-loc-new');
+  if (!sel || !inp) return;
+  const on = sel.value === NEW_LOC_VALUE;
+  inp.style.display = on ? '' : 'none';
+  if (!on) inp.value = '';
+  return on;
+}
+document.getElementById('lf-loc')?.addEventListener('change', () => {
+  if (syncNewLocInput()) document.getElementById('lf-loc-new').focus();
+});
+
+// ═══════════════════════════════════════════
 // LICENSES
 // ═══════════════════════════════════════════
 export function filterLic(type, btn) {
@@ -554,12 +640,37 @@ export function filterLic(type, btn) {
   renderLicenses();
 }
 
+// Location chips for the Licenses sheet, built from whatever locations the
+// licenses actually use — so a newly added location gets its own filter the
+// moment a license is saved under it. Built with DOM nodes (not inline
+// handlers) because location names are user-typed.
+function buildLicLocFilter() {
+  const wrap = document.getElementById('licLocFilterWrap');
+  if (!wrap) return;
+  const locs = [...new Set(licenses.map(l => cleanLoc(l.loc)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  if (activeLicLocFilter !== 'all' && !locs.includes(activeLicLocFilter)) activeLicLocFilter = 'all';
+  wrap.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'loc-filter-label'; label.textContent = 'Location:';
+  wrap.appendChild(label);
+  ['all', ...locs].forEach(l => {
+    const b = document.createElement('button');
+    b.className = 'filter-btn' + (l === activeLicLocFilter ? ' active' : '');
+    b.textContent = l === 'all' ? 'All' : l;
+    b.addEventListener('click', () => { activeLicLocFilter = l; renderLicenses(); });
+    wrap.appendChild(b);
+  });
+}
+
 function renderLicenses() {
   const today = new Date(); today.setHours(0,0,0,0);
   const typeMap = { SE:'lt-se', EPFO:'lt-epf', ESIC:'lt-esic', PT:'lt-pt', Factory:'lt-factory', CLRA:'lt-clra', ISMW:'lt-clra' };
   const typeLbl = { SE:'Shops & Establishment', EPFO:'EPFO / PF', ESIC:'ESIC', PT:'Prof. Tax (EC/RC)', Factory:'Factory License', CLRA:'CLRA', ISMW:'ISMW' };
 
-  const filtered = licenses.filter(l => activeLicFilter === 'all' || l.type === activeLicFilter);
+  buildLicLocFilter();
+  const filtered = licenses
+    .filter(l => activeLicFilter === 'all' || l.type === activeLicFilter)
+    .filter(l => activeLicLocFilter === 'all' || cleanLoc(l.loc) === activeLicLocFilter);
   const sorted = applySortMode(filtered, 'licenses', 'expiry');
   const draggable = getSortMode('licenses') === 'custom';
   const grid = document.getElementById('licenseGrid');
@@ -699,6 +810,7 @@ const ESIC_LOC_CHECKBOX_IDS = ['f-esic-blr','f-esic-coorg','f-esic-kabini','f-es
 const YEARLY_LOC_CHECKBOX_IDS = ['f-yr-blr','f-yr-coorg','f-yr-kabini','f-yr-hampi','f-yr-ear','f-yr-tl'];
 
 function clearEntryForm() {
+  populateLocationSelect('f-loc'); // picks up any locations added manually
   ['f-date','f-desc','f-notes','f-act','f-mode','f-submitted','f-contractors','f-workers','f-yr-others'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const cat = document.getElementById('f-cat'); if (cat) cat.selectedIndex = 0;
   const loc = document.getElementById('f-loc'); if (loc) loc.selectedIndex = 0;
@@ -792,7 +904,9 @@ export function openAddLicModal() {
   if (saveBtn) saveBtn.textContent = 'Save License';
   ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const type = document.getElementById('lf-type'); if (type) type.selectedIndex = 0;
+  populateLocationSelect('lf-loc', { withLicenseLocs: true, allowNew: true });
   const loc = document.getElementById('lf-loc'); if (loc) loc.selectedIndex = 0;
+  syncNewLocInput();
   const folder = document.getElementById('lf-folder'); if (folder) folder.selectedIndex = 0;
   document.getElementById('addLicModal').classList.add('show');
 }
@@ -806,7 +920,9 @@ export function openEditLicModal(id) {
   const saveBtn = document.getElementById('addLicModalSaveBtn');
   if (saveBtn) saveBtn.textContent = 'Save Changes';
   const setVal = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v ?? ''; };
+  populateLocationSelect('lf-loc', { withLicenseLocs: true, allowNew: true });
   setVal('lf-company', lic.company); setVal('lf-type', lic.type); setVal('lf-loc', lic.loc);
+  syncNewLocInput();
   setVal('lf-expiry', toInputDateStr(lic.expiry)); setVal('lf-limit', lic.limit); setVal('lf-current', lic.current);
   setVal('lf-folder', lic.folder); setVal('lf-remarks', lic.remarks);
   document.getElementById('addLicModal').classList.add('show');
@@ -892,17 +1008,29 @@ export async function saveNewLicense() {
   const company = document.getElementById('lf-company').value.trim();
   if (!company) { alert('Company name required.'); return; }
   const expiryVal = document.getElementById('lf-expiry').value;
-  const fields = {
-    company, loc: document.getElementById('lf-loc').value, type: document.getElementById('lf-type').value,
-    expiry: expiryVal ? new Date(expiryVal) : null,
-    limit: parseInt(document.getElementById('lf-limit').value) || null,
-    current: parseInt(document.getElementById('lf-current').value) || null,
-    folder: document.getElementById('lf-folder').value,
-    remarks: document.getElementById('lf-remarks').value.trim(),
-  };
+  let loc = document.getElementById('lf-loc').value;
+  const addingNewLoc = loc === NEW_LOC_VALUE;
+  if (addingNewLoc) {
+    loc = cleanLoc(document.getElementById('lf-loc-new').value);
+    if (!loc) { alert('Please enter the new location name.'); return; }
+  }
   try {
+    // Reuses an existing location if the typed name matches one (any
+    // capitalisation), otherwise saves it as a new shared location.
+    if (addingNewLoc) loc = await ensureLocation(loc);
+    const fields = {
+      company, loc, type: document.getElementById('lf-type').value,
+      expiry: expiryVal ? new Date(expiryVal) : null,
+      limit: parseInt(document.getElementById('lf-limit').value) || null,
+      current: parseInt(document.getElementById('lf-current').value) || null,
+      folder: document.getElementById('lf-folder').value,
+      remarks: document.getElementById('lf-remarks').value.trim(),
+    };
     if (currentLicEditId) {
       const prevLic = licenses.find(l => l.id === currentLicEditId);
+      // updateRecord replaces the whole fields map, so carry the card's
+      // custom-order position across or it would jump to the top.
+      if (prevLic && prevLic.sortOrder !== undefined) fields.sortOrder = prevLic.sortOrder;
       await updateRecord(currentLicEditId, 'license', prevLic ? stripId(prevLic) : {}, fields, company);
       currentLicEditId = null;
     } else {
@@ -910,7 +1038,8 @@ export async function saveNewLicense() {
       await addRecord('license', fields, company);
     }
     closeModal('addLicModal');
-    ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks'].forEach(id => document.getElementById(id).value = '');
+    ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks','lf-loc-new'].forEach(id => document.getElementById(id).value = '');
+    syncNewLocInput();
   } catch (e) { alert('Could not save: ' + e.message); }
 }
 
@@ -1274,6 +1403,7 @@ export function jumpToSearchResult(idx) {
     renderYearlyTable();
   } else if (r.type === 'license') {
     activeLicFilter = 'all';
+    activeLicLocFilter = 'all';
     document.querySelectorAll('#panel-licenses .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     renderLicenses();
   }
