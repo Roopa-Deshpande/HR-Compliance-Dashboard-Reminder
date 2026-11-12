@@ -457,6 +457,8 @@ tr.drag-over-row { box-shadow: inset 0 2px 0 var(--navy-vivid); }
 .form-group label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
 .form-input { border: 1px solid var(--warm-grey); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: 'Inter', sans-serif; width: 100%; transition: border-color 200ms ease, box-shadow 200ms ease; }
 .form-input:focus { outline: none; border-color: var(--navy-vivid); box-shadow: 0 0 0 3px rgba(60,92,231,0.18); }
+/* Total fields that are auto-calculated from a Male + Female split */
+.form-input[readonly] { background: var(--cream); color: var(--text-muted); cursor: not-allowed; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 /* Per-location "which sites have filed" checkbox matrix, used in the
    Add/Edit modal for Half-Yearly ESIC and Yearly rows that stay wide-format

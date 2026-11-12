@@ -662,6 +662,33 @@ function buildLicLocFilter() {
   });
 }
 
+// One headcount-vs-limit check: null when there's no limit or no count to
+// compare, otherwise the percentage and whether it's nearing (80%+) or
+// exceeding (100%+) the limit.
+function capacityCheck(cur, lim) {
+  if (!lim || cur === null || cur === undefined) return null;
+  const pct = Math.round((cur / lim) * 100);
+  return { pct, near: pct >= 80 && pct < 100, exceeded: pct >= 100 };
+}
+// Bar + alert tag for one count. The single legacy bar keeps its original
+// wording; Male / Female / Total tags name which count tripped.
+function capacityHtml(c) {
+  const hasCur = c.cur !== null && c.cur !== undefined;
+  if (!c.st) {
+    if (!hasCur && !c.lim) return '';
+    // Count without a limit (or a limit without a count yet): show the
+    // figure, but there's nothing to alert against.
+    return `<div class="employee-bar-wrap"><div class="employee-bar-label"><span>${c.label}</span><strong>${hasCur ? c.cur : '–'}${c.lim ? ' / ' + c.lim : ''}</strong></div></div>`;
+  }
+  const { pct, near, exceeded } = c.st;
+  const barClass = exceeded ? 'danger' : near ? 'warn' : 'safe';
+  const who = c.plain ? '' : c.label.toUpperCase() + ' ';
+  let html = `<div class="employee-bar-wrap"><div class="employee-bar-label"><span>${c.label}</span><strong>${c.cur} / ${c.lim} (${pct}%)</strong></div><div class="emp-bar"><div class="emp-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div></div></div>`;
+  if (exceeded) html += `<div class="license-alert-tag red">⚠️ ${who}LIMIT EXCEEDED – Amend License</div>`;
+  else if (near) html += `<div class="license-alert-tag">⚠️ ${who}80%+ Capacity – Plan Renewal</div>`;
+  return html;
+}
+
 function renderLicenses() {
   const today = new Date(); today.setHours(0,0,0,0);
   const typeMap = { SE:'lt-se', EPFO:'lt-epf', ESIC:'lt-esic', PT:'lt-pt', Factory:'lt-factory', CLRA:'lt-clra', ISMW:'lt-clra' };
@@ -685,11 +712,19 @@ function renderLicenses() {
       daysToExpiry = Math.ceil((expD - today) / 86400000);
       expired = daysToExpiry < 0; expiringSoon = daysToExpiry >= 0 && daysToExpiry <= 180;
     }
-    let limitNear = false, limitExceeded = false, pct = 0;
-    if (lic.limit && lic.current !== null && lic.current !== undefined) {
-      pct = Math.round((lic.current / lic.limit) * 100);
-      limitNear = pct >= 80 && pct < 100; limitExceeded = pct >= 100;
-    }
+    // Headcount vs licensed limit. S&E licences that have a Male/Female
+    // split are tracked as three independent counts (Male, Female, Total),
+    // each with its own bar and 80% / 100% alert; everything else (and
+    // S&E licences not yet split) keeps the single "Employees" bar.
+    const hasGender = lic.type === 'SE' && [lic.limitMale, lic.limitFemale, lic.currentMale, lic.currentFemale].some(v => v !== null && v !== undefined);
+    const caps = hasGender
+      ? [ { label: 'Male', cur: lic.currentMale, lim: lic.limitMale },
+          { label: 'Female', cur: lic.currentFemale, lim: lic.limitFemale },
+          { label: 'Total', cur: lic.current, lim: lic.limit } ]
+      : [ { label: 'Employees', cur: lic.current, lim: lic.limit, plain: true } ];
+    caps.forEach(c => { c.st = capacityCheck(c.cur, c.lim); });
+    const limitExceeded = caps.some(c => c.st && c.st.exceeded);
+    const limitNear = caps.some(c => c.st && c.st.near);
     let cardClass = 'license-card';
     if (expired || limitExceeded) cardClass += ' expired'; else if (expiringSoon || limitNear) cardClass += ' expiring-soon';
 
@@ -701,13 +736,7 @@ function renderLicenses() {
     } else if (['EPFO','ESIC'].includes(lic.type)) { expiryHtml = 'Permanent'; expiryClass = 'ok'; }
     else if (lic.type === 'PT') { expiryHtml = 'Renew Annually'; expiryClass = ''; }
 
-    let empBarHtml = '';
-    if (lic.limit && (lic.current !== null && lic.current !== undefined)) {
-      const barClass = limitExceeded ? 'danger' : limitNear ? 'warn' : 'safe';
-      empBarHtml = `<div class="employee-bar-wrap"><div class="employee-bar-label"><span>Employees</span><strong>${lic.current} / ${lic.limit} (${pct}%)</strong></div><div class="emp-bar"><div class="emp-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div></div></div>`;
-      if (limitExceeded) empBarHtml += `<div class="license-alert-tag red">⚠️ LIMIT EXCEEDED – Amend License</div>`;
-      else if (limitNear) empBarHtml += `<div class="license-alert-tag">⚠️ 80%+ Capacity – Plan Renewal</div>`;
-    }
+    const empBarHtml = caps.map(c => capacityHtml(c)).join('');
     let alertHtml = '';
     if (expired) alertHtml = `<div class="license-alert-tag red">🚨 EXPIRED – Renew Immediately</div>`;
     else if (expiringSoon) alertHtml = `<div class="license-alert-tag">⏰ Expiring in ${daysToExpiry} days</div>`;
@@ -896,14 +925,50 @@ export function openEditModal(id, type) {
   document.getElementById('addModal').classList.add('show');
 }
 
+// ── Shops & Establishment: Male / Female / Total headcount fields ──
+const GENDER_IDS = ['lf-limit-male', 'lf-limit-female', 'lf-current-male', 'lf-current-female'];
+const val = id => (document.getElementById(id)?.value ?? '').toString().trim();
+// Blank → null, otherwise the number — including 0, which is a real
+// headcount (e.g. no female employees yet) and must not be lost.
+function numOrNull(id) {
+  const v = val(id);
+  if (v === '') return null;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? null : Math.max(0, n);
+}
+// Gender fields only apply to S&E licences.
+function syncGenderBlock() {
+  const isSE = document.getElementById('lf-type')?.value === 'SE';
+  const block = document.getElementById('lf-gender-block');
+  if (block) block.style.display = isSE ? '' : 'none';
+  if (!isSE) ['lf-limit', 'lf-current'].forEach(id => { const el = document.getElementById(id); if (el) el.readOnly = false; });
+  else syncGenderTotals();
+}
+// Once either Male or Female is entered for a pair, that pair's Total is
+// the sum and locked; with neither entered, Total stays a normal field
+// (so licences tracked as a single headcount work exactly as before).
+function syncGenderTotals() {
+  [['lf-limit', 'lf-limit-male', 'lf-limit-female'], ['lf-current', 'lf-current-male', 'lf-current-female']].forEach(([tot, m, f]) => {
+    const totEl = document.getElementById(tot);
+    if (!totEl) return;
+    const split = val(m) !== '' || val(f) !== '';
+    totEl.readOnly = split;
+    totEl.title = split ? 'Calculated as Male + Female' : '';
+    if (split) totEl.value = (parseInt(val(m), 10) || 0) + (parseInt(val(f), 10) || 0);
+  });
+}
+document.getElementById('lf-type')?.addEventListener('change', syncGenderBlock);
+GENDER_IDS.forEach(id => document.getElementById(id)?.addEventListener('input', syncGenderTotals));
+
 export function openAddLicModal() {
   currentLicEditId = null;
   const title = document.querySelector('#addLicModal .modal-header h3');
   if (title) title.textContent = 'Add License';
   const saveBtn = document.getElementById('addLicModalSaveBtn');
   if (saveBtn) saveBtn.textContent = 'Save License';
-  ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks', ...GENDER_IDS].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const type = document.getElementById('lf-type'); if (type) type.selectedIndex = 0;
+  syncGenderBlock();
   populateLocationSelect('lf-loc', { withLicenseLocs: true, allowNew: true });
   const loc = document.getElementById('lf-loc'); if (loc) loc.selectedIndex = 0;
   syncNewLocInput();
@@ -924,7 +989,10 @@ export function openEditLicModal(id) {
   setVal('lf-company', lic.company); setVal('lf-type', lic.type); setVal('lf-loc', lic.loc);
   syncNewLocInput();
   setVal('lf-expiry', toInputDateStr(lic.expiry)); setVal('lf-limit', lic.limit); setVal('lf-current', lic.current);
+  setVal('lf-limit-male', lic.limitMale); setVal('lf-limit-female', lic.limitFemale);
+  setVal('lf-current-male', lic.currentMale); setVal('lf-current-female', lic.currentFemale);
   setVal('lf-folder', lic.folder); setVal('lf-remarks', lic.remarks);
+  syncGenderBlock();
   document.getElementById('addLicModal').classList.add('show');
 }
 
@@ -1008,6 +1076,20 @@ export async function saveNewLicense() {
   const company = document.getElementById('lf-company').value.trim();
   if (!company) { alert('Company name required.'); return; }
   const expiryVal = document.getElementById('lf-expiry').value;
+  const licType = document.getElementById('lf-type').value;
+  // Headcounts. For S&E, a Male/Female split (when given) makes Total the
+  // sum; both halves of a pair must be entered together so the Total can't
+  // silently omit one of them. Checked before anything is saved.
+  let limit = numOrNull('lf-limit'), current = numOrNull('lf-current');
+  let limitMale = null, limitFemale = null, currentMale = null, currentFemale = null;
+  if (licType === 'SE') {
+    limitMale = numOrNull('lf-limit-male'); limitFemale = numOrNull('lf-limit-female');
+    currentMale = numOrNull('lf-current-male'); currentFemale = numOrNull('lf-current-female');
+    if ((limitMale === null) !== (limitFemale === null)) { alert('Enter both the Male and Female licensed limits (use 0 if none), or leave both blank.'); return; }
+    if ((currentMale === null) !== (currentFemale === null)) { alert('Enter both the Male and Female current employee counts (use 0 if none), or leave both blank.'); return; }
+    if (limitMale !== null) limit = limitMale + limitFemale;
+    if (currentMale !== null) current = currentMale + currentFemale;
+  }
   let loc = document.getElementById('lf-loc').value;
   const addingNewLoc = loc === NEW_LOC_VALUE;
   if (addingNewLoc) {
@@ -1019,10 +1101,10 @@ export async function saveNewLicense() {
     // capitalisation), otherwise saves it as a new shared location.
     if (addingNewLoc) loc = await ensureLocation(loc);
     const fields = {
-      company, loc, type: document.getElementById('lf-type').value,
+      company, loc, type: licType,
       expiry: expiryVal ? new Date(expiryVal) : null,
-      limit: parseInt(document.getElementById('lf-limit').value) || null,
-      current: parseInt(document.getElementById('lf-current').value) || null,
+      limit, current,
+      ...(licType === 'SE' ? { limitMale, limitFemale, currentMale, currentFemale } : {}),
       folder: document.getElementById('lf-folder').value,
       remarks: document.getElementById('lf-remarks').value.trim(),
     };
@@ -1038,8 +1120,9 @@ export async function saveNewLicense() {
       await addRecord('license', fields, company);
     }
     closeModal('addLicModal');
-    ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks','lf-loc-new'].forEach(id => document.getElementById(id).value = '');
+    ['lf-company','lf-expiry','lf-limit','lf-current','lf-remarks','lf-loc-new', ...GENDER_IDS].forEach(id => document.getElementById(id).value = '');
     syncNewLocInput();
+    syncGenderBlock();
   } catch (e) { alert('Could not save: ' + e.message); }
 }
 
