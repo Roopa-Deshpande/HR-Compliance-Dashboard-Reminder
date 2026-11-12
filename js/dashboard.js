@@ -678,12 +678,12 @@ function capacityHtml(c) {
     if (!hasCur && !c.lim) return '';
     // Count without a limit (or a limit without a count yet): show the
     // figure, but there's nothing to alert against.
-    return `<div class="employee-bar-wrap"><div class="employee-bar-label"><span>${c.label}</span><strong>${hasCur ? c.cur : '–'}${c.lim ? ' / ' + c.lim : ''}</strong></div></div>`;
+    return `<div class="employee-bar-wrap${c.cat ? ' ' + c.cat : ''}"><div class="employee-bar-label"><span>${c.label}</span><strong>${hasCur ? c.cur : '–'}${c.lim ? ' / ' + c.lim : ''}</strong></div></div>`;
   }
   const { pct, near, exceeded } = c.st;
   const barClass = exceeded ? 'danger' : near ? 'warn' : 'safe';
   const who = c.plain ? '' : c.label.toUpperCase() + ' ';
-  let html = `<div class="employee-bar-wrap"><div class="employee-bar-label"><span>${c.label}</span><strong>${c.cur} / ${c.lim} (${pct}%)</strong></div><div class="emp-bar"><div class="emp-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div></div></div>`;
+  let html = `<div class="employee-bar-wrap${c.cat ? ' ' + c.cat : ''}"><div class="employee-bar-label"><span>${c.label}</span><strong>${c.cur} / ${c.lim} (${pct}%)</strong></div><div class="emp-bar"><div class="emp-bar-fill ${barClass}${c.cat ? ' ' + c.cat : ''}" style="width:${Math.min(pct,100)}%"></div></div></div>`;
   if (exceeded) html += `<div class="license-alert-tag red">⚠️ ${who}LIMIT EXCEEDED – Amend License</div>`;
   else if (near) html += `<div class="license-alert-tag">⚠️ ${who}80%+ Capacity – Plan Renewal</div>`;
   return html;
@@ -718,9 +718,9 @@ function renderLicenses() {
     // S&E licences not yet split) keeps the single "Employees" bar.
     const hasGender = lic.type === 'SE' && [lic.limitMale, lic.limitFemale, lic.currentMale, lic.currentFemale].some(v => v !== null && v !== undefined);
     const caps = hasGender
-      ? [ { label: 'Male', cur: lic.currentMale, lim: lic.limitMale },
-          { label: 'Female', cur: lic.currentFemale, lim: lic.limitFemale },
-          { label: 'Total', cur: lic.current, lim: lic.limit } ]
+      ? [ { label: 'Male', cat: 'male', cur: lic.currentMale, lim: lic.limitMale },
+          { label: 'Female', cat: 'female', cur: lic.currentFemale, lim: lic.limitFemale },
+          { label: 'Total', cat: 'total', cur: lic.current, lim: lic.limit } ]
       : [ { label: 'Employees', cur: lic.current, lim: lic.limit, plain: true } ];
     caps.forEach(c => { c.st = capacityCheck(c.cur, c.lim); });
     const limitExceeded = caps.some(c => c.st && c.st.exceeded);
