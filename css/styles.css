@@ -424,6 +424,13 @@ tr.drag-over-row { box-shadow: inset 0 2px 0 var(--navy-vivid); }
 .emp-bar-fill.safe { background: linear-gradient(90deg, #12E29B, var(--upcoming)); }
 .emp-bar-fill.warn { background: linear-gradient(90deg, #FFC14D, var(--due-soon)); }
 .emp-bar-fill.danger { background: linear-gradient(90deg, #FF6B8C, var(--overdue)); }
+/* Licence marked Inactive (business unit closed): neutral grey, no alert colours */
+.emp-bar-fill.idle { background: #B7BFDC; }
+.license-card.inactive { opacity: 0.62; filter: grayscale(0.5); }
+.license-card.inactive:hover { opacity: 0.92; }
+.lic-status { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.4px; }
+.lic-status.active { background: var(--esi-bg); color: #00754F; }
+.lic-status.inactive { background: #E6E9F4; color: var(--text-muted); }
 /* Male / Female / Total bars on S&E licences. Same three status colours,
    same thresholds — only the shade changes by count, so you can tell the
    bars apart at a glance without changing what green / amber / red mean:

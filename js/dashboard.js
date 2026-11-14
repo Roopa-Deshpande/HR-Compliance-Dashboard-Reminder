@@ -23,6 +23,7 @@ let activeCatFilter = 'all';
 let activeLocFilter = 'all';
 let activeLicFilter = 'all';
 let activeLicLocFilter = 'all';
+let activeLicStatusFilter = 'all'; // all | Active | Inactive
 let customLocations = []; // locations added manually ('location' records)
 let currentAddSection = 'monthly';
 let currentEditId = null;
@@ -681,12 +682,33 @@ function capacityHtml(c) {
     return `<div class="employee-bar-wrap${c.cat ? ' ' + c.cat : ''}"><div class="employee-bar-label"><span>${c.label}</span><strong>${hasCur ? c.cur : '–'}${c.lim ? ' / ' + c.lim : ''}</strong></div></div>`;
   }
   const { pct, near, exceeded } = c.st;
-  const barClass = exceeded ? 'danger' : near ? 'warn' : 'safe';
+  // quiet = licence marked Inactive: show the figures in neutral grey, no alerts.
+  const barClass = c.quiet ? 'idle' : exceeded ? 'danger' : near ? 'warn' : 'safe';
   const who = c.plain ? '' : c.label.toUpperCase() + ' ';
   let html = `<div class="employee-bar-wrap${c.cat ? ' ' + c.cat : ''}"><div class="employee-bar-label"><span>${c.label}</span><strong>${c.cur} / ${c.lim} (${pct}%)</strong></div><div class="emp-bar"><div class="emp-bar-fill ${barClass}${c.cat ? ' ' + c.cat : ''}" style="width:${Math.min(pct,100)}%"></div></div></div>`;
+  if (c.quiet) return html;
   if (exceeded) html += `<div class="license-alert-tag red">⚠️ ${who}LIMIT EXCEEDED – Amend License</div>`;
   else if (near) html += `<div class="license-alert-tag">⚠️ ${who}80%+ Capacity – Plan Renewal</div>`;
   return html;
+}
+
+// Active / Inactive chips for the Licenses sheet, with counts.
+function buildLicStatusFilter() {
+  const wrap = document.getElementById('licStatusFilterWrap');
+  if (!wrap) return;
+  const inactiveN = licenses.filter(l => l.status === 'Inactive').length;
+  const opts = [['all', 'All'], ['Active', 'Active (' + (licenses.length - inactiveN) + ')'], ['Inactive', 'Inactive (' + inactiveN + ')']];
+  wrap.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'loc-filter-label'; label.textContent = 'Status:';
+  wrap.appendChild(label);
+  opts.forEach(([val, text]) => {
+    const b = document.createElement('button');
+    b.className = 'filter-btn' + (val === activeLicStatusFilter ? ' active' : '');
+    b.textContent = text;
+    b.addEventListener('click', () => { activeLicStatusFilter = val; renderLicenses(); });
+    wrap.appendChild(b);
+  });
 }
 
 function renderLicenses() {
@@ -695,10 +717,15 @@ function renderLicenses() {
   const typeLbl = { SE:'Shops & Establishment', EPFO:'EPFO / PF', ESIC:'ESIC', PT:'Prof. Tax (EC/RC)', Factory:'Factory License', CLRA:'CLRA', ISMW:'ISMW' };
 
   buildLicLocFilter();
+  buildLicStatusFilter();
   const filtered = licenses
     .filter(l => activeLicFilter === 'all' || l.type === activeLicFilter)
-    .filter(l => activeLicLocFilter === 'all' || cleanLoc(l.loc) === activeLicLocFilter);
+    .filter(l => activeLicLocFilter === 'all' || cleanLoc(l.loc) === activeLicLocFilter)
+    .filter(l => activeLicStatusFilter === 'all' || (l.status === 'Inactive' ? 'Inactive' : 'Active') === activeLicStatusFilter);
   const sorted = applySortMode(filtered, 'licenses', 'expiry');
+  // In date order, closed units sink below the live ones (stable sort, so
+  // order within each group is untouched). Custom order is left as set.
+  if (getSortMode('licenses') !== 'custom') sorted.sort((a, b) => (a.status === 'Inactive') - (b.status === 'Inactive'));
   const draggable = getSortMode('licenses') === 'custom';
   const grid = document.getElementById('licenseGrid');
   if (!grid) return;
@@ -706,11 +733,15 @@ function renderLicenses() {
   let count = 0;
 
   sorted.forEach((lic) => {
+    // Inactive = the business unit is closed: the licence stays on record
+    // but is greyed out and raises no expiry / limit alerts.
+    const inactive = lic.status === 'Inactive';
     let daysToExpiry = null, expired = false, expiringSoon = false;
     if (lic.expiry) {
       const expD = new Date(lic.expiry); expD.setHours(0,0,0,0);
       daysToExpiry = Math.ceil((expD - today) / 86400000);
       expired = daysToExpiry < 0; expiringSoon = daysToExpiry >= 0 && daysToExpiry <= 180;
+      if (inactive) { expired = false; expiringSoon = false; }
     }
     // Headcount vs licensed limit. S&E licences that have a Male/Female
     // split are tracked as three independent counts (Male, Female, Total),
@@ -722,10 +753,10 @@ function renderLicenses() {
           { label: 'Female', cat: 'female', cur: lic.currentFemale, lim: lic.limitFemale },
           { label: 'Total', cat: 'total', cur: lic.current, lim: lic.limit } ]
       : [ { label: 'Employees', cur: lic.current, lim: lic.limit, plain: true } ];
-    caps.forEach(c => { c.st = capacityCheck(c.cur, c.lim); });
-    const limitExceeded = caps.some(c => c.st && c.st.exceeded);
-    const limitNear = caps.some(c => c.st && c.st.near);
-    let cardClass = 'license-card';
+    caps.forEach(c => { c.st = capacityCheck(c.cur, c.lim); c.quiet = inactive; });
+    const limitExceeded = !inactive && caps.some(c => c.st && c.st.exceeded);
+    const limitNear = !inactive && caps.some(c => c.st && c.st.near);
+    let cardClass = 'license-card' + (inactive ? ' inactive' : '');
     if (expired || limitExceeded) cardClass += ' expired'; else if (expiringSoon || limitNear) cardClass += ' expiring-soon';
 
     let expiryHtml = '–', expiryClass = 'ok';
@@ -735,6 +766,7 @@ function renderLicenses() {
       else { expiryHtml = fmtShort(lic.expiry); expiryClass = 'ok'; }
     } else if (['EPFO','ESIC'].includes(lic.type)) { expiryHtml = 'Permanent'; expiryClass = 'ok'; }
     else if (lic.type === 'PT') { expiryHtml = 'Renew Annually'; expiryClass = ''; }
+    if (inactive) expiryClass = '';
 
     const empBarHtml = caps.map(c => capacityHtml(c)).join('');
     let alertHtml = '';
@@ -748,7 +780,7 @@ function renderLicenses() {
         <div class="license-card-header">
           <div style="display:flex;align-items:center;gap:6px">
             ${draggable ? '<span class="license-drag-handle">⠿</span>' : ''}
-            <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div></div>
+            <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div><div style="margin-top:5px"><span class="lic-status ${inactive ? 'inactive' : 'active'}">${inactive ? 'Inactive' : 'Active'}</span></div></div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
             <span class="license-type-badge ${typeMap[lic.type]||'lt-se'}">${typeLbl[lic.type]||lic.type}</span>
@@ -757,7 +789,7 @@ function renderLicenses() {
         </div>
         <div class="license-meta">
           <div class="license-meta-item"><div class="lm-label">Expiry / Validity</div><div class="lm-val ${expiryClass}">${expiryHtml}</div></div>
-          <div class="license-meta-item"><div class="lm-label">Status</div><div class="lm-val">${expired ? '<span style="color:var(--overdue)">Expired</span>' : expiringSoon ? '<span style="color:#d97706">Expiring Soon</span>' : '<span style="color:var(--upcoming)">Valid</span>'}</div></div>
+          <div class="license-meta-item"><div class="lm-label">Status</div><div class="lm-val">${inactive ? '<span style="color:var(--text-muted)">Inactive</span>' : expired ? '<span style="color:var(--overdue)">Expired</span>' : expiringSoon ? '<span style="color:#d97706">Expiring Soon</span>' : '<span style="color:var(--upcoming)">Valid</span>'}</div></div>
         </div>
         ${empBarHtml}${alertHtml}
         ${lic.remarks ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">${esc(lic.remarks)}</div>` : ''}
@@ -767,7 +799,7 @@ function renderLicenses() {
   });
 
   if (!count) grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No licenses for this filter.</div>`;
-  const expiredCount = licenses.filter(l => l.expiry && l.expiry < new Date()).length;
+  const expiredCount = licenses.filter(l => l.status !== 'Inactive' && l.expiry && l.expiry < new Date()).length;
   const tcLic = document.getElementById('tc-lic');
   if (tcLic) tcLic.textContent = expiredCount;
 }
@@ -973,6 +1005,7 @@ export function openAddLicModal() {
   const loc = document.getElementById('lf-loc'); if (loc) loc.selectedIndex = 0;
   syncNewLocInput();
   const folder = document.getElementById('lf-folder'); if (folder) folder.selectedIndex = 0;
+  const status = document.getElementById('lf-status'); if (status) status.value = 'Active';
   document.getElementById('addLicModal').classList.add('show');
 }
 
@@ -992,6 +1025,7 @@ export function openEditLicModal(id) {
   setVal('lf-limit-male', lic.limitMale); setVal('lf-limit-female', lic.limitFemale);
   setVal('lf-current-male', lic.currentMale); setVal('lf-current-female', lic.currentFemale);
   setVal('lf-folder', lic.folder); setVal('lf-remarks', lic.remarks);
+  setVal('lf-status', lic.status === 'Inactive' ? 'Inactive' : 'Active');
   syncGenderBlock();
   document.getElementById('addLicModal').classList.add('show');
 }
@@ -1107,6 +1141,7 @@ export async function saveNewLicense() {
       ...(licType === 'SE' ? { limitMale, limitFemale, currentMale, currentFemale } : {}),
       folder: document.getElementById('lf-folder').value,
       remarks: document.getElementById('lf-remarks').value.trim(),
+      status: document.getElementById('lf-status').value === 'Inactive' ? 'Inactive' : 'Active',
     };
     if (currentLicEditId) {
       const prevLic = licenses.find(l => l.id === currentLicEditId);
@@ -1260,7 +1295,7 @@ export function exportCSV() {
   hyEsic.forEach(i => rows.push(['Half-Yearly ESIC', fmt(i.due), i.period, 'ESIC', '', getStatus(i.due)]));
   hyPt.forEach(i => rows.push(['Half-Yearly PT', fmt(i.due), i.period, 'PT', i.loc, (i.status==='Done'||i.done) ? 'Submitted' : getStatus(i.due)]));
   yearly.forEach(i => rows.push(['Yearly', i.due, i.name, i.act, '', i.done ? 'Done' : 'Pending']));
-  licenses.forEach(i => rows.push(['License', i.expiry ? fmt(i.expiry) : '', i.company, i.type, i.loc, i.expiry && i.expiry < new Date() ? 'Expired' : 'Valid']));
+  licenses.forEach(i => rows.push(['License', i.expiry ? fmt(i.expiry) : '', i.company, i.type, i.loc, i.status === 'Inactive' ? 'Inactive' : (i.expiry && i.expiry < new Date() ? 'Expired' : 'Valid')]));
   const csv = rows.map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -1413,7 +1448,7 @@ function buildSearchIndex() {
   hyEsic.forEach(i => rows.push({ id: i.id, type: 'halfyearly_esic', fiscalYear: i.fiscalYear, title: 'ESIC Half-Yearly Return', sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.period || ''}`, text: `esic half yearly ${i.period}`.toLowerCase() }));
   hyPt.forEach(i => rows.push({ id: i.id, type: 'halfyearly_pt', fiscalYear: i.fiscalYear, title: `Professional Tax – ${i.loc || ''}`, sub: `${fyLabel(i.fiscalYear)} · ${fmt(i.due)} · ${i.period || ''}`, text: `professional tax ${i.loc} ${i.period}`.toLowerCase() }));
   yearly.forEach(i => rows.push({ id: i.id, type: 'yearly', fiscalYear: i.fiscalYear, title: i.name, sub: `${fyLabel(i.fiscalYear)} · ${i.due || ''} · ${i.act || ''}`, text: `${i.name} ${i.act} ${i.mode}`.toLowerCase() }));
-  licenses.forEach(i => rows.push({ id: i.id, type: 'license', fiscalYear: null, title: i.company, sub: `${i.type} · ${i.loc || ''}`, text: `${i.company} ${i.type} ${i.loc} license`.toLowerCase() }));
+  licenses.forEach(i => rows.push({ id: i.id, type: 'license', fiscalYear: null, title: i.company, sub: `${i.type} · ${i.loc || ''}${i.status === 'Inactive' ? ' · Inactive' : ''}`, text: `${i.company} ${i.type} ${i.loc} license`.toLowerCase() }));
   return rows;
 }
 
@@ -1487,6 +1522,7 @@ export function jumpToSearchResult(idx) {
   } else if (r.type === 'license') {
     activeLicFilter = 'all';
     activeLicLocFilter = 'all';
+    activeLicStatusFilter = 'all';
     document.querySelectorAll('#panel-licenses .filter-row .filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
     renderLicenses();
   }

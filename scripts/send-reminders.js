@@ -138,6 +138,8 @@ async function collectLicenseAlerts(db) {
   const snap = await db.collection("records").where("type", "==", "license").get();
   snap.forEach((docSnap) => {
     const fields = docSnap.data().fields || {};
+    // Business unit closed — no point reminding anyone about its licence.
+    if (fields.status === "Inactive") return;
     const expiry = toDate(fields.expiry);
     if (!expiry) return;
     const bucket = classify(daysUntil(expiry, today));

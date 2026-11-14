@@ -305,6 +305,7 @@
     </div>
   </div>
   <div class="loc-filter-wrap" id="licLocFilterWrap"><span class="loc-filter-label">Location:</span></div>
+  <div class="loc-filter-wrap" id="licStatusFilterWrap"><span class="loc-filter-label">Status:</span></div>
   <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:#92400E; display:flex; gap:8px; align-items:flex-start;">
     <span style="font-size:16px">⚠️</span>
     <span><strong>Auto-highlight rules:</strong> License cards turn <strong style="color:#d97706">yellow</strong> when expiry is within 6 months or employee count reaches 80% of licensed limit. They turn <strong style="color:var(--overdue)">red</strong> when expired or limit exceeded. Shops &amp; Establishment licences with a Male / Female split are checked separately for Male, Female and Total — any one of them can trigger the alert.</span>
@@ -491,11 +492,15 @@
         </div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label>Operational Status</label>
+          <select class="form-input" id="lf-status"><option value="Active">Active</option><option value="Inactive">Inactive (unit closed)</option></select>
+        </div>
         <div class="form-group"><label>Document in Folder?</label>
           <select class="form-input" id="lf-folder"><option value="Yes">Yes</option><option value="No">No</option><option value="NA">N/A</option></select>
         </div>
-        <div class="form-group"><label>Remarks</label><input type="text" class="form-input" id="lf-remarks" placeholder="Optional"></div>
       </div>
+      <div class="form-group"><label>Remarks</label><input type="text" class="form-input" id="lf-remarks" placeholder="Optional"></div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:2px">Mark a licence <strong>Inactive</strong> when its business unit has closed. It stays on record but is greyed out, and no longer raises expiry or employee-limit alerts or email reminders.</p>
     </div>
     <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addLicModal')">Cancel</button><button class="btn-save" id="addLicModalSaveBtn" onclick="saveNewLicense()">Save License</button></div>
   </div>
