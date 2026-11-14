@@ -431,20 +431,6 @@ tr.drag-over-row { box-shadow: inset 0 2px 0 var(--navy-vivid); }
 .lic-status { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.4px; }
 .lic-status.active { background: var(--esi-bg); color: #00754F; }
 .lic-status.inactive { background: #E6E9F4; color: var(--text-muted); }
-/* Male / Female / Total bars on S&E licences. Same three status colours,
-   same thresholds — only the shade changes by count, so you can tell the
-   bars apart at a glance without changing what green / amber / red mean:
-   Total keeps the original colours, Male is a deeper shade, Female a
-   lighter one. (Bars on licences without a split carry no category class
-   and stay exactly as above.) */
-.emp-bar-fill.safe.male   { background: linear-gradient(90deg, #00B380, #007A55); }
-.emp-bar-fill.warn.male   { background: linear-gradient(90deg, #F39200, #C26A00); }
-.emp-bar-fill.danger.male { background: linear-gradient(90deg, #E81246, #A8002A); }
-.emp-bar-fill.safe.female   { background: linear-gradient(90deg, #8EEFC8, #55E0AC); }
-.emp-bar-fill.warn.female   { background: linear-gradient(90deg, #FFE08F, #FFCB5C); }
-.emp-bar-fill.danger.female { background: linear-gradient(90deg, #FFA3B8, #FF7E9B); }
-/* Total is the headline figure — give its label a little extra weight. */
-.employee-bar-wrap.total .employee-bar-label span { font-weight: 700; color: var(--navy); }
 .license-alert-tag {
   display: inline-flex; align-items: center; gap: 4px; margin-top: 8px;
   background: var(--lwf-bg); color: #8A4B00; border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 700;
