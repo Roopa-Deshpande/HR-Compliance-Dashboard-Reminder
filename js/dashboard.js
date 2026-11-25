@@ -786,10 +786,8 @@ function renderLicenses() {
     if (expired) alertHtml = `<div class="license-alert-tag red">🚨 EXPIRED – Renew Immediately</div>`;
     else if (expiringSoon) alertHtml = `<div class="license-alert-tag">⏰ Expiring in ${daysToExpiry} days</div>`;
 
-    const folderHtml = `<div class="license-folder">📁 Document in folder: <span class="${lic.folder==='Yes'?'folder-yes':lic.folder==='No'?'folder-no':''}">${esc(lic.folder)}</span></div>`;
-
     const nDocs = licenseDocs.filter(d => d.licenseId === lic.id).length;
-    const docsHtml = `<div class="license-folder"><button type="button" class="lic-docs-btn" data-lic="${esc(lic.id)}">📎 ${nDocs ? 'Documents (' + nDocs + ')' : 'Attach documents'}</button></div>`;
+    const docsHtml = `<div class="license-docs-line"><button type="button" class="lic-docs-btn" data-lic="${esc(lic.id)}">📎 ${nDocs ? 'Documents (' + nDocs + ')' : 'Attach documents'}</button></div>`;
 
     grid.insertAdjacentHTML('beforeend', `
       <div class="${cardClass}" data-record-id="${lic.id}" draggable="${draggable}">
@@ -809,7 +807,6 @@ function renderLicenses() {
         </div>
         ${empBarHtml}${alertHtml}
         ${lic.remarks ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">${esc(lic.remarks)}</div>` : ''}
-        ${folderHtml}
         ${docsHtml}
       </div>`);
     count++;
@@ -1123,7 +1120,6 @@ export function openAddLicModal() {
   populateLocationSelect('lf-loc', { withLicenseLocs: true, allowNew: true });
   const loc = document.getElementById('lf-loc'); if (loc) loc.selectedIndex = 0;
   syncNewLocInput();
-  const folder = document.getElementById('lf-folder'); if (folder) folder.selectedIndex = 0;
   const status = document.getElementById('lf-status'); if (status) status.value = 'Active';
   document.getElementById('addLicModal').classList.add('show');
 }
@@ -1143,7 +1139,7 @@ export function openEditLicModal(id) {
   setVal('lf-expiry', toInputDateStr(lic.expiry)); setVal('lf-limit', lic.limit); setVal('lf-current', lic.current);
   setVal('lf-limit-male', lic.limitMale); setVal('lf-limit-female', lic.limitFemale);
   setVal('lf-current-male', lic.currentMale); setVal('lf-current-female', lic.currentFemale);
-  setVal('lf-folder', lic.folder); setVal('lf-remarks', lic.remarks);
+  setVal('lf-remarks', lic.remarks);
   setVal('lf-status', lic.status === 'Inactive' ? 'Inactive' : 'Active');
   syncGenderBlock();
   document.getElementById('addLicModal').classList.add('show');
@@ -1258,7 +1254,6 @@ export async function saveNewLicense() {
       expiry: expiryVal ? new Date(expiryVal) : null,
       limit, current,
       ...(licType === 'SE' ? { limitMale, limitFemale, currentMale, currentFemale } : {}),
-      folder: document.getElementById('lf-folder').value,
       remarks: document.getElementById('lf-remarks').value.trim(),
       status: document.getElementById('lf-status').value === 'Inactive' ? 'Inactive' : 'Active',
     };

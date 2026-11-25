@@ -495,11 +495,8 @@
         <div class="form-group"><label>Operational Status</label>
           <select class="form-input" id="lf-status"><option value="Active">Active</option><option value="Inactive">Inactive (unit closed)</option></select>
         </div>
-        <div class="form-group"><label>Document in Folder?</label>
-          <select class="form-input" id="lf-folder"><option value="Yes">Yes</option><option value="No">No</option><option value="NA">N/A</option></select>
-        </div>
+        <div class="form-group"><label>Remarks</label><input type="text" class="form-input" id="lf-remarks" placeholder="Optional"></div>
       </div>
-      <div class="form-group"><label>Remarks</label><input type="text" class="form-input" id="lf-remarks" placeholder="Optional"></div>
       <p style="font-size:11px;color:var(--text-muted);margin-top:2px">Mark a licence <strong>Inactive</strong> when its business unit has closed. It stays on record but is greyed out, and no longer raises expiry or employee-limit alerts or email reminders.</p>
     </div>
     <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('addLicModal')">Cancel</button><button class="btn-save" id="addLicModalSaveBtn" onclick="saveNewLicense()">Save License</button></div>
