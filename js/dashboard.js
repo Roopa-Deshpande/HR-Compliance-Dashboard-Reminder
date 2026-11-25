@@ -7,6 +7,7 @@ import { subscribeRecords, addRecord, updateRecord, deleteRecord, toggleRecordDo
 import { subscribeAuditLog, deleteAuditEntry } from "./audit.js";
 import { subscribeUsers, createUser, setUserRole, setUserActive, updateUserProfile, deleteUserProfile } from "./admin.js";
 import { currentUser, isAdmin } from "./auth.js";
+import { subscribeLicenseDocs, attachLicenseDocument, fetchLicenseDocumentBlob, deleteLicenseDocument, checkFile, VIEWABLE } from "./docs.js";
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 // Real Date.getMonth() indices, but in fiscal display order (Apr..Mar)
@@ -25,6 +26,8 @@ let activeLicFilter = 'all';
 let activeLicLocFilter = 'all';
 let activeLicStatusFilter = 'all'; // all | Active | Inactive
 let customLocations = []; // locations added manually ('location' records)
+let licenseDocs = [];     // attached-document metadata (see docs.js)
+let currentDocsLicId = null;
 let currentAddSection = 'monthly';
 let currentEditId = null;
 let currentEditType = null;
@@ -267,6 +270,11 @@ export function initDashboard() {
   unsubs.push(subscribeRecords('location', rows => {
     customLocations = rows.map(r => ({ id: r.id, name: cleanLoc(r.fields && r.fields.name) })).filter(l => l.name);
   }));
+  unsubs.push(subscribeLicenseDocs(rows => {
+    licenseDocs = rows.map(r => ({ ...r, uploadedAt: toDate(r.uploadedAt) }));
+    renderLicenses();
+    renderLicDocsList();
+  }));
   unsubs.push(subscribeRecords('license', rows => {
     licenses = rows.map(r => ({ id: r.id, done: r.done, ...r.fields, expiry: toDate(r.fields.expiry) }));
     renderLicenses();
@@ -382,9 +390,14 @@ function renderMonthlyTable(mIdx) {
 }
 
 export async function deleteEntry(id, type, summary) {
-  if (!confirm(`Delete "${summary}"?`)) return;
-  try { await deleteRecord(id, type, {}, summary); }
-  catch (e) { alert('Could not delete: ' + e.message); }
+  // A licence's attached documents go with it.
+  const attached = type === 'license' ? licenseDocs.filter(d => d.licenseId === id) : [];
+  const extra = attached.length ? `\n\nIts ${attached.length} attached document${attached.length > 1 ? 's' : ''} will be deleted too.` : '';
+  if (!confirm(`Delete "${summary}"?${extra}`)) return;
+  try {
+    await deleteRecord(id, type, {}, summary);
+    if (attached.length) await Promise.allSettled(attached.map(d => deleteLicenseDocument(d, summary)));
+  } catch (e) { alert('Could not delete: ' + e.message); }
 }
 
 function buildMonthTabs() {
@@ -775,6 +788,9 @@ function renderLicenses() {
 
     const folderHtml = `<div class="license-folder">📁 Document in folder: <span class="${lic.folder==='Yes'?'folder-yes':lic.folder==='No'?'folder-no':''}">${esc(lic.folder)}</span></div>`;
 
+    const nDocs = licenseDocs.filter(d => d.licenseId === lic.id).length;
+    const docsHtml = `<div class="license-folder"><button type="button" class="lic-docs-btn" data-lic="${esc(lic.id)}">📎 ${nDocs ? 'Documents (' + nDocs + ')' : 'Attach documents'}</button></div>`;
+
     grid.insertAdjacentHTML('beforeend', `
       <div class="${cardClass}" data-record-id="${lic.id}" draggable="${draggable}">
         <div class="license-card-header">
@@ -794,6 +810,7 @@ function renderLicenses() {
         ${empBarHtml}${alertHtml}
         ${lic.remarks ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">${esc(lic.remarks)}</div>` : ''}
         ${folderHtml}
+        ${docsHtml}
       </div>`);
     count++;
   });
@@ -956,6 +973,108 @@ export function openEditModal(id, type) {
   fillEntryForm(type, row);
   document.getElementById('addModal').classList.add('show');
 }
+
+// ── Licence documents (attach / view / download / delete) ──────────
+function fmtSize(n) {
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+function licSummary(licId) {
+  const l = licenses.find(x => x.id === licId);
+  return l ? l.company + ' (' + l.loc + ')' : 'licence';
+}
+function docStatus(msg, isError) {
+  const el = document.getElementById('licDocsStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? 'var(--overdue)' : 'var(--text-muted)';
+}
+function docError(e) {
+  if (e && e.code === 'permission-denied') return 'Not allowed — document storage has not been switched on in the database rules yet.';
+  return (e && e.message) || String(e);
+}
+function renderLicDocsList() {
+  const wrap = document.getElementById('licDocsList');
+  if (!wrap || !currentDocsLicId) return;
+  const rows = licenseDocs.filter(d => d.licenseId === currentDocsLicId)
+    .sort((a, b) => (b.uploadedAt ? b.uploadedAt.getTime() : Infinity) - (a.uploadedAt ? a.uploadedAt.getTime() : Infinity));
+  wrap.innerHTML = rows.length ? rows.map(d => `
+    <div class="doc-row">
+      <div class="doc-info"><div class="doc-name">${esc(d.name)}</div>
+        <div class="doc-meta">${fmtSize(d.size)} · ${esc(d.uploadedBy || '')}${d.uploadedAt ? ' · ' + fmt(d.uploadedAt) : ''}</div></div>
+      <div class="doc-actions">
+        ${VIEWABLE.has(d.ext) ? `<button type="button" class="doc-btn" data-act="view" data-id="${esc(d.id)}">View</button>` : ''}
+        <button type="button" class="doc-btn" data-act="download" data-id="${esc(d.id)}">Download</button>
+        <button type="button" class="doc-btn danger" data-act="delete" data-id="${esc(d.id)}">Delete</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state" style="padding:14px">No documents attached yet.</div>';
+}
+function openLicDocs(licId) {
+  const lic = licenses.find(l => l.id === licId);
+  if (!lic) return;
+  currentDocsLicId = licId;
+  const title = document.getElementById('licDocsTitle');
+  if (title) title.textContent = 'Documents — ' + lic.company + ' (' + lic.loc + ')';
+  docStatus('');
+  const input = document.getElementById('licDocsInput'); if (input) input.value = '';
+  renderLicDocsList();
+  document.getElementById('licDocsModal').classList.add('show');
+}
+document.getElementById('licenseGrid')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.lic-docs-btn');
+  if (btn) openLicDocs(btn.dataset.lic);
+});
+document.getElementById('licDocsInput')?.addEventListener('change', async (e) => {
+  const input = e.target;
+  const files = Array.from(input.files || []);
+  const licId = currentDocsLicId;
+  if (!files.length || !licId) return;
+  const summary = licSummary(licId);
+  const problems = [];
+  input.disabled = true;
+  for (const file of files) {
+    const bad = checkFile(file);
+    if (bad) { problems.push(bad); continue; }
+    try {
+      docStatus('Uploading ' + file.name + '…');
+      await attachLicenseDocument(licId, summary, file, (n, total) => docStatus('Uploading ' + file.name + ' (' + n + '/' + total + ')…'));
+    } catch (err) { problems.push('"' + file.name + '": ' + docError(err)); }
+  }
+  input.value = ''; input.disabled = false;
+  docStatus(problems.length ? problems.join('\n') : 'Uploaded ✓', problems.length > 0);
+});
+document.getElementById('licDocsList')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const meta = licenseDocs.find(d => d.id === btn.dataset.id);
+  if (!meta) return;
+  const act = btn.dataset.act;
+  if (act === 'delete') {
+    if (!confirm('Delete "' + meta.name + '"? This cannot be undone.')) return;
+    try { docStatus('Deleting…'); await deleteLicenseDocument(meta, licSummary(meta.licenseId)); docStatus('Deleted.'); }
+    catch (err) { docStatus('Could not delete: ' + docError(err), true); }
+    return;
+  }
+  // View opens a tab right away (before the download finishes) so the
+  // browser doesn't treat it as a pop-up.
+  const tab = act === 'view' ? window.open('', '_blank') : null;
+  try {
+    docStatus('Fetching ' + meta.name + '…');
+    const blob = await fetchLicenseDocumentBlob(meta);
+    const url = URL.createObjectURL(blob);
+    if (tab) { tab.location = url; }
+    else {
+      const a = document.createElement('a');
+      a.href = url; a.download = meta.name;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    docStatus('');
+  } catch (err) {
+    if (tab) tab.close();
+    docStatus(docError(err), true);
+  }
+});
 
 // ── Shops & Establishment: Male / Female / Total headcount fields ──
 const GENDER_IDS = ['lf-limit-male', 'lf-limit-female', 'lf-current-male', 'lf-current-female'];

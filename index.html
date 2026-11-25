@@ -506,6 +506,23 @@
   </div>
 </div>
 
+<!-- LICENCE DOCUMENTS MODAL — attach / view / download / delete files for one licence -->
+<div class="modal-overlay" id="licDocsModal">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header"><h3 id="licDocsTitle">Documents</h3><button class="modal-close" onclick="closeModal('licDocsModal')">×</button></div>
+    <div class="modal-body">
+      <div id="licDocsList"></div>
+      <div class="form-group" style="margin-top:14px">
+        <label>Attach document(s)</label>
+        <input type="file" class="form-input" id="licDocsInput" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx">
+        <p style="font-size:11px;color:var(--text-muted);margin-top:2px">PDF, image (JPG / PNG / WEBP), Word or Excel · up to 5 MB each. Uploading starts as soon as you choose the files.</p>
+      </div>
+      <div id="licDocsStatus" style="font-size:12px;margin-top:6px;white-space:pre-line"></div>
+    </div>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('licDocsModal')">Close</button></div>
+  </div>
+</div>
+
 <!-- COMPLETION-DATE MODAL (shown when clicking the ✅ Mark Complete icon
      on a pending row) — On Time / Late is computed automatically from this
      date vs the due date, not a separate self-reported choice. Reason for

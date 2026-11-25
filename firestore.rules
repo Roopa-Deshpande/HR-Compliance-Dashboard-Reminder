@@ -61,6 +61,18 @@ service cloud.firestore {
       allow create, update, delete: if isActiveUser();
     }
 
+    // ── licenseDocs / licenseDocChunks — documents attached to a ─
+    // licence (metadata + the file's pieces; see js/docs.js). Same access
+    // as records: any active user may attach, read and remove them.
+    match /licenseDocs/{docId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isActiveUser();
+    }
+    match /licenseDocChunks/{chunkId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isActiveUser();
+    }
+
     // ── auditLog/{id} — immutable trail, admin-only delete ───────
     match /auditLog/{entryId} {
       allow read: if isActiveUser();
