@@ -787,14 +787,16 @@ function renderLicenses() {
     else if (expiringSoon) alertHtml = `<div class="license-alert-tag">⏰ Expiring in ${daysToExpiry} days</div>`;
 
     const nDocs = licenseDocs.filter(d => d.licenseId === lic.id).length;
-    const docsHtml = `<div class="license-docs-line"><button type="button" class="lic-docs-btn" data-lic="${esc(lic.id)}">📎 ${nDocs ? 'Documents (' + nDocs + ')' : 'Attach documents'}</button></div>`;
+    const docsHtml = `<div class="license-docs-line"><button type="button" class="lic-docs-btn${nDocs ? ' has' : ''}" data-lic="${esc(lic.id)}">📎 ${nDocs ? 'Documents (' + nDocs + ')' : 'Attach documents'}</button></div>`;
+    // Paperclip badge up by the title, so a licence with attachments is spotted at a glance.
+    const docsFlag = nDocs ? `<button type="button" class="lic-docs-btn lic-docs-flag" data-lic="${esc(lic.id)}" title="${nDocs} document${nDocs > 1 ? 's' : ''} attached — click to open">📎 ${nDocs}</button>` : '';
 
     grid.insertAdjacentHTML('beforeend', `
       <div class="${cardClass}" data-record-id="${lic.id}" draggable="${draggable}">
         <div class="license-card-header">
           <div style="display:flex;align-items:center;gap:6px">
             ${draggable ? '<span class="license-drag-handle">⠿</span>' : ''}
-            <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div><div style="margin-top:5px"><span class="lic-status ${inactive ? 'inactive' : 'active'}">${inactive ? 'Inactive' : 'Active'}</span></div></div>
+            <div><div class="license-card-title">${esc(lic.company)}</div><div class="license-card-company">📍 ${esc(lic.loc)}</div><div style="margin-top:5px"><span class="lic-status ${inactive ? 'inactive' : 'active'}">${inactive ? 'Inactive' : 'Active'}</span>${docsFlag}</div></div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
             <span class="license-type-badge ${typeMap[lic.type]||'lt-se'}">${typeLbl[lic.type]||lic.type}</span>
